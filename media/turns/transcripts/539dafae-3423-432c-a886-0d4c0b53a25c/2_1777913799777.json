@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "539dafae-3423-432c-a886-0d4c0b53a25c",
+  "turn_id": 2,
+  "question_text": "ok ce qoui exactement les terminologiede ri svp ?",
+  "answer_text": "La RI (Research Interface) est une interface de recherche qui permet d'effectuer des tâches telles que la production automatique de résumés et la recherche agrégée. Elle sert à trouver des documents ayant les mêmes mots que la requête.",
+  "language": "fr",
+  "subject": "language",
+  "chapter_title": "Chapitre 1 Introduction A La Ri",
+  "section_title": "II. DÉFINITIONS ET TERMINOLOGIE",
+  "chapter_index": 1,
+  "section_index": 2,
+  "char_position": 604,
+  "audio_answer_path": "turns/answers/539dafae-3423-432c-a886-0d4c0b53a25c/2_1777913799777.mp3"
+}

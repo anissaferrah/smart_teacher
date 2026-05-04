@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Mon profil</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #0b0d16; color: #fff; margin: 0; }
+
+  header {
+    background: linear-gradient(135deg, #161928 0%, #1c2138 100%);
+    padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #2a2f4a;
+  }
+  header h1 { margin: 0; font-size: 18px; }
+  header .meta { font-size: 13px; color: #9aa1bf; }
+  header button {
+    background: #2a2f4a; color: #fff; border: none; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; margin-left: 8px;
+  }
+  header button:hover { background: #3a3f5a; }
+  header a { color: #fff; text-decoration: none; }
+
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: #161928; border-radius: 12px; padding: 20px; border: 1px solid #2a2f4a; }
+  .card h2 { margin: 0 0 14px; font-size: 16px; color: #c4caea; }
+  .card .label { color: #9aa1bf; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* Identity card */
+  .identity { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .avatar {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: linear-gradient(135deg, #7c6dfa, #00e5b0);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700;
+  }
+  .id-info h3 { margin: 0; font-size: 18px; }
+  .id-info p { margin: 4px 0 0; color: #9aa1bf; font-size: 13px; }
+
+  /* Stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  @media (max-width: 580px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile { background: #0e1120; border-radius: 8px; padding: 10px; text-align: center; }
+  .tile .num { font-size: 20px; font-weight: 700; color: #7c6dfa; }
+  .tile .lbl { font-size: 11px; color: #9aa1bf; }
+
+  /* Learning style radar */
+  .radar-wrap { position: relative; height: 280px; }
+  .radar-wrap canvas { max-width: 100%; max-height: 280px; }
+  .style-bars { margin-top: 14px; }
+  .style-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .style-row .lbl { width: 130px; font-size: 13px; color: #c4caea; }
+  .style-row .bar { flex: 1; background: #0e1120; border-radius: 4px; height: 8px; overflow: hidden; }
+  .style-row .bar-inner { height: 100%; border-radius: 4px; transition: width .4s ease; }
+  .style-row .pct { width: 50px; text-align: right; font-size: 12px; color: #9aa1bf; }
+  .visual-color    { background: #6ee5b0; }
+  .auditory-color  { background: #ffe588; }
+  .kinesthetic-color { background: #ff88e5; }
+  .reading-color   { background: #88c4ff; }
+
+  .dominant-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 12px;
+    font-size: 13px; font-weight: 600; margin-top: 8px;
+  }
+  .dom-visual { background: #2a4a3a; color: #6ee5b0; }
+  .dom-auditory { background: #4a4a2a; color: #ffe588; }
+  .dom-kinesthetic { background: #4a2a4a; color: #ff88e5; }
+  .dom-reading { background: #2a3a5a; color: #88c4ff; }
+  .dom-mixed, .dom-unknown { background: #2a2f4a; color: #9aa1bf; }
+
+  .hint-box {
+    background: #0e1120; border-left: 3px solid #7c6dfa;
+    padding: 10px 14px; border-radius: 4px; margin-top: 12px;
+    font-size: 13px; color: #c4caea; line-height: 1.5;
+  }
+
+  /* Mastery / runtime / activity rows */
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px; font-size: 13px;
+  }
+  .row .name { flex: 1; color: #c4caea; }
+  .row .bar { width: 120px; background: #0e1120; border-radius: 4px; height: 6px; overflow: hidden; }
+  .row .bar-inner { height: 100%; background: linear-gradient(90deg, #7c6dfa, #00e5b0); }
+  .row .pct { width: 48px; text-align: right; font-size: 12px; color: #9aa1bf; }
+
+  .activity-row {
+    padding: 8px 0; border-bottom: 1px dashed #2a2f4a; font-size: 13px;
+    display: flex; gap: 12px;
+  }
+  .activity-row:last-child { border: none; }
+  .activity-row .when { color: #6ec1ff; min-width: 110px; font-size: 11px; }
+  .activity-row .what { flex: 1; }
+
+  button.primary {
+    background: linear-gradient(135deg, #7c6dfa, #00e5b0);
+    color: #fff; border: none; padding: 10px 18px;
+    border-radius: 8px; font-weight: 600; cursor: pointer;
+    font-size: 14px;
+  }
+  button.primary:hover { opacity: .9; }
+  button.primary:disabled { opacity: .5; cursor: wait; }
+
+  .status-msg { font-size: 13px; color: #6ee5b0; margin-left: 12px; }
+  .status-msg.error { color: #ff7a8a; }
+
+  .empty { color: #9aa1bf; padding: 12px; text-align: center; font-size: 13px; }
+
+  /* Bayesian HDI visualization */
+  .bayes-row { margin-bottom: 14px; }
+  .bayes-row .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px; font-size: 13px;
+  }
+  .bayes-row .name { color: #c4caea; font-weight: 600; }
+  .bayes-row .summary { color: #9aa1bf; font-size: 12px; }
+  .hdi-track {
+    position: relative; height: 14px; background: #0e1120;
+    border-radius: 7px; overflow: hidden;
+  }
+  .hdi-band {
+    position: absolute; top: 0; bottom: 0;
+    border-radius: 7px; opacity: 0.35;
+  }
+  .hdi-mean {
+    position: absolute; top: -2px; bottom: -2px;
+    width: 3px; border-radius: 2px;
+    box-shadow: 0 0 4px rgba(255,255,255,0.4);
+  }
+  .visual-bg    { background: #6ee5b0; }
+  .auditory-bg  { background: #ffe588; }
+  .kinesthetic-bg { background: #ff88e5; }
+  .reading-bg   { background: #88c4ff; }
+
+  .conf-meter {
+    position: relative; height: 8px; background: #0e1120;
+    border-radius: 4px; overflow: hidden; margin-top: 4px;
+  }
+  .conf-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, #ff7a8a, #ffe588 50%, #6ee5b0);
+    transition: width .4s ease;
+  }
+  .conf-line {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: #9aa1bf; margin-bottom: 2px;
+  }
+  .conf-value { color: #c4caea; font-weight: 600; }
+
+  .xv-box {
+    margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+    background: #0e1120; border: 1px solid #2a2f4a; font-size: 13px;
+  }
+  .xv-box.agree { border-color: #2a4a3a; }
+  .xv-box.disagree { border-color: #4a3a2a; }
+  .xv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .xv-status { font-weight: 600; }
+  .xv-status.ok { color: #6ee5b0; }
+  .xv-status.warn { color: #ffe588; }
+  .xv-cosine { color: #9aa1bf; font-size: 12px; }
+  .xv-detail { color: #c4caea; font-size: 12px; line-height: 1.5; margin-top: 4px; }
+
+  .legend {
+    font-size: 11px; color: #9aa1bf; margin-top: 8px; line-height: 1.5;
+    border-top: 1px dashed #2a2f4a; padding-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>👤 Mon profil — Smart Teacher</h1>
+  <div>
+    <span class="meta" id="user-meta">…</span>
+    &nbsp;·&nbsp;
+    <a href="/static/index.html"><button>📚 Cours</button></a>
+    <a href="/static/skill_tree.html"><button>🌳 Skill tree</button></a>
+    <button id="logout-btn">Déconnexion</button>
+  </div>
+</header>
+
+<main>
+  <!-- 1. Identity card + stats -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="identity">
+      <div class="avatar" id="avatar">?</div>
+      <div class="id-info">
+        <h3 id="full-name">Chargement…</h3>
+        <p id="email-and-level">…</p>
+      </div>
+    </div>
+    <div class="tiles" id="stats-tiles"></div>
+  </div>
+
+  <div class="grid">
+
+    <!-- 2. Learning style with radar -->
+    <div class="card">
+      <h2>🧠 Mon style d'apprentissage</h2>
+      <div class="label">Calculé depuis ton comportement (30 derniers jours)</div>
+
+      <div class="radar-wrap" style="margin-top: 16px;">
+        <canvas id="radar-chart"></canvas>
+      </div>
+
+      <div class="style-bars" id="style-bars">
+        <div class="empty">Chargement…</div>
+      </div>
+
+      <div id="dominant-line" style="margin-top: 12px;">
+        <span class="label">Style dominant :</span>
+        <span class="dominant-badge dom-unknown" id="dominant-badge">–</span>
+      </div>
+
+      <div class="hint-box" id="hint-box" style="display:none;">
+        <strong>💡 Adaptation active :</strong>
+        <span id="hint-text">…</span>
+      </div>
+
+      <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <button class="primary" id="recompute-btn">🔄 Recalculer mon style</button>
+        <button class="primary" id="vark-btn" style="background: linear-gradient(135deg, #00e5b0, #6ec1ff);">🧠 Test VARK</button>
+        <span class="status-msg" id="recompute-status"></span>
+      </div>
+    </div>
+
+    <!-- 2bis. Bayesian posterior with HDI 95% + cross-validation -->
+    <div class="card">
+      <h2>📊 Style bayésien (M2)</h2>
+      <div class="label">Posterior Dirichlet — moyenne ±  intervalle de crédibilité 95%</div>
+
+      <div class="conf-line" style="margin-top: 14px;">
+        <span>Niveau de confiance du modèle</span>
+        <span class="conf-value" id="bayes-confidence">–</span>
+      </div>
+      <div class="conf-meter"><div class="conf-fill" id="bayes-conf-fill" style="width:0%"></div></div>
+      <div class="conf-line" style="margin-top: 4px;">
+        <span id="bayes-nobs">0 observations</span>
+        <span class="dominant-badge dom-unknown" id="bayes-dominant" style="font-size: 11px; padding: 2px 8px;">–</span>
+      </div>
+
+      <div id="bayes-bars" style="margin-top: 16px;">
+        <div class="empty">Chargement…</div>
+      </div>
+
+      <div id="xv-container"></div>
+
+      <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <button class="primary" id="bayes-rebuild-btn"
+                style="background: linear-gradient(135deg, #6ec1ff, #7c6dfa); padding: 8px 14px; font-size: 13px;">
+          ⚙️ Reconstruire depuis l'historique
+        </button>
+        <span class="status-msg" id="bayes-rebuild-status"></span>
+      </div>
+
+      <div class="legend">
+        La <strong>barre claire</strong> = intervalle 95% (HDI). Le <strong>trait blanc</strong> = moyenne posterior.
+        Plus l'intervalle est étroit, plus l'estimation est précise.
+      </div>
+    </div>
+
+    <!-- 3. Mastery overview -->
+    <div class="card">
+      <h2>📚 Maîtrise par cours</h2>
+      <div id="mastery-list"><div class="empty">Chargement…</div></div>
+    </div>
+
+    <!-- 4. Personnalisation runtime -->
+    <div class="card">
+      <h2>⚙️ Adaptation active</h2>
+      <div id="pers-runtime"><div class="empty">Chargement…</div></div>
+    </div>
+
+    <!-- 4b. Consolidated StudentModel snapshot -->
+    <!-- Vue unifiée que les agents (responder, planner, bandit) lisent à
+         chaque turn. Sources : MasteryRepo + ProfileManager + Bayes
+         posterior + PersonalizationContext, agrégées en parallèle. -->
+    <div class="card">
+      <h2>👤 Vue unifiée (StudentModel)</h2>
+      <div id="student-model"><div class="empty">Chargement…</div></div>
+    </div>
+
+    <!-- 5. Recent activity -->
+    <div class="card">
+      <h2>⚡ Activité récente</h2>
+      <div id="activity-list"><div class="empty">Chargement…</div></div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+const token = localStorage.getItem('smart_teacher_token');
+const userBrief = JSON.parse(localStorage.getItem('smart_teacher_user') || '{}');
+
+if (!token) {
+  window.location.href = '/static/login.html';
+}
+const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+// ── Identity & profile load ─────────────────────────────────────────
+
+async function loadProfile() {
+  try {
+    const res = await fetch('/student/me/profile', { headers: authHeaders });
+    if (res.status === 401) { window.location.href = '/static/login.html'; return; }
+    const p = await res.json();
+    renderIdentity(p);
+    renderStats(p);
+    renderMastery(p);
+    renderRuntime(p);
+    renderStudentModel(p);
+    renderActivity(p);
+  } catch (e) {
+    $('full-name').textContent = 'Erreur de chargement';
+    console.error(e);
+  }
+}
+
+function renderIdentity(p) {
+  const name = p.name || userBrief.first_name || 'Étudiant';
+  $('full-name').textContent = name;
+  $('email-and-level').textContent = `${userBrief.email || ''} · ${userBrief.account_level || 'student'}`;
+  $('avatar').textContent = (name[0] || '?').toUpperCase();
+  $('user-meta').textContent = userBrief.email || name;
+}
+
+function renderStats(p) {
+  const s = p.stats || {};
+  const g = p.gamification || {};
+  $('stats-tiles').innerHTML = `
+    <div class="tile"><div class="num">${s.concepts_mastered ?? 0}</div><div class="lbl">Maîtrisés</div></div>
+    <div class="tile"><div class="num">${s.concepts_in_progress ?? 0}</div><div class="lbl">En cours</div></div>
+    <div class="tile"><div class="num">${g.total_xp ?? 0}</div><div class="lbl">XP</div></div>
+    <div class="tile"><div class="num">${g.streak_days ?? 0}🔥</div><div class="lbl">Streak</div></div>
+  `;
+}
+
+function renderMastery(p) {
+  const courses = p.courses_progression || [];
+  if (courses.length === 0) {
+    $('mastery-list').innerHTML = '<div class="empty">Aucun concept tracké pour l\'instant. Commence une session pour démarrer !</div>';
+    return;
+  }
+  $('mastery-list').innerHTML = courses.slice(0, 8).map(c => {
+    const pct = (c.avg_score * 100).toFixed(0);
+    const cid = (c.course_id || '').substring(0, 12);
+    return `
+      <div class="row">
+        <div class="name">📖 ${cid}… <span style="color:#9aa1bf">(${c.mastered}/${c.total})</span></div>
+        <div class="bar"><div class="bar-inner" style="width:${pct}%"></div></div>
+        <div class="pct">${pct}%</div>
+      </div>`;
+  }).join('');
+}
+
+function renderRuntime(p) {
+  const profile = p.profile || {};
+  $('pers-runtime').innerHTML = `
+    <div class="row"><div class="name">🎙️ Vitesse de la voix (pace)</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${profile.pace || 'normal'}</div></div>
+    <div class="row"><div class="name">📊 Difficulté préférée</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${profile.preferred_difficulty || 'intermediate'}</div></div>
+    <div class="row"><div class="name">📝 Profondeur d'explication</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${profile.preferred_explanation_depth || 'balanced'}</div></div>
+    <div class="row"><div class="name">⏱️ Temps de réponse moyen</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${profile.avg_response_time_s ?? 0}s</div></div>
+    <div class="row"><div class="name">😕 Taux de confusion</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${((profile.confusion_rate || 0) * 100).toFixed(0)}%</div></div>
+  `;
+}
+
+// ── StudentModel — vue consolidée que les agents lisent à chaque turn ──
+// Source d'unification : MasteryRepo + ProfileManager + Bayes posterior +
+// PersonalizationContext. La carte affiche en clair tous les leviers que
+// le responder/planner/bandit utilisent, avec un statut OK/WARN selon que
+// les fetches en backend ont tous réussi.
+function renderStudentModel(p) {
+  const m = p.student_model;
+  const el = $('student-model');
+  if (!m) {
+    el.innerHTML = '<div class="empty">Pas de données — l\'agrégateur n\'a pas pu charger.</div>';
+    return;
+  }
+
+  const status = m.ok ? '<span style="color:#6ee5b0">✅ OK</span>'
+                      : `<span style="color:#ffb066">⚠️ partial (failed: ${(m.sources_failed || []).join(', ') || 'none'})</span>`;
+  const masteryPct = (m.mastery_avg * 100).toFixed(0);
+  const styleConfPct = (m.style.confidence * 100).toFixed(0);
+
+  // V/A/R/K bar : the dominant style is highlighted, others muted.
+  const styleBars = Object.entries(m.style.scores || {}).map(([k, v]) => {
+    const pct = (v * 100).toFixed(0);
+    const isDom = (k === m.style.dominant);
+    const color = STYLE_COLORS[k] || '#9aa1bf';
+    return `
+      <div class="row" style="margin:4px 0">
+        <div class="name" style="width:120px; ${isDom ? 'font-weight:600' : 'opacity:0.7'}">${isDom ? '⭐ ' : ''}${k}</div>
+        <div class="bar" style="flex:1"><div class="bar-inner" style="width:${pct}%; background:${color}"></div></div>
+        <div class="pct" style="width:48px; color:${color}">${pct}%</div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="row" style="margin-bottom:10px">
+      <div class="name">État global</div>
+      <div class="pct" style="width:auto">${status}</div>
+    </div>
+
+    <div class="row"><div class="name">📚 Maîtrise moyenne</div>
+      <div class="bar"><div class="bar-inner" style="width:${masteryPct}%; background:#7c6dfa"></div></div>
+      <div class="pct">${masteryPct}% <span style="color:#9aa1bf">(${m.mastery_count} concepts)</span></div></div>
+
+    <div class="row" style="margin-top:14px"><div class="name" style="font-weight:600">🎓 Style d'apprentissage</div>
+      <div class="pct" style="width:auto; color:${STYLE_COLORS[m.style.dominant] || '#9aa1bf'}; font-weight:600">${m.style.dominant} (conf=${styleConfPct}%)</div></div>
+    ${styleBars}
+
+    <div class="row" style="margin-top:14px"><div class="name">🎙️ Pace</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${m.pace}</div></div>
+    <div class="row"><div class="name">⏱️ Temps de réponse moyen</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${m.avg_response_time_s}s</div></div>
+    <div class="row"><div class="name">😕 Confusion</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${(m.confusion_rate * 100).toFixed(0)}%</div></div>
+    <div class="row"><div class="name">📝 Profondeur</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${m.preferred_explanation_depth}</div></div>
+    <div class="row"><div class="name">📊 Difficulté</div>
+      <div class="pct" style="width:auto; color:#7c6dfa; font-weight:600">${m.preferred_difficulty}</div></div>
+    <div class="row"><div class="name">🔊 Speech rate</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${m.speech_rate}×</div></div>
+    <div class="row"><div class="name">💪 Engagement</div>
+      <div class="pct" style="width:auto; color:#9aa1bf">${(m.engagement * 100).toFixed(0)}%</div></div>
+  `;
+}
+
+function renderActivity(p) {
+  const acts = p.recent_activity || [];
+  if (acts.length === 0) {
+    $('activity-list').innerHTML = '<div class="empty">Aucune activité récente.</div>';
+    return;
+  }
+  $('activity-list').innerHTML = acts.slice(0, 12).map(a => {
+    const when = (a.answered_at || '').slice(0, 16).replace('T', ' ');
+    const ico = a.is_correct ? '✅' : '❌';
+    return `
+      <div class="activity-row">
+        <span class="when">${when}</span>
+        <span class="what">${ico} <strong>${a.concept_label || '?'}</strong> — ${(a.question_preview || '').substring(0, 80)}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Learning style + radar ─────────────────────────────────────────
+
+const STYLE_COLORS = {
+  visual: '#6ee5b0', auditory: '#ffe588',
+  kinesthetic: '#ff88e5', reading: '#88c4ff',
+  mixed: '#9aa1bf', unknown: '#9aa1bf',
+};
+
+async function loadLearningStyle() {
+  try {
+    const res = await fetch('/student/me/learning-style', { headers: authHeaders });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    renderStyleScores(data.scores);
+    renderStyleHint(data.scores.dominant, data.prompt_hint);
+    drawRadar(data.scores);
+  } catch (e) {
+    $('style-bars').innerHTML = '<div class="empty">Pas encore assez d\'interactions pour calculer ton style. Commence quelques sessions !</div>';
+  }
+}
+
+function renderStyleScores(s) {
+  const styles = ['visual', 'auditory', 'kinesthetic', 'reading'];
+  const labels = { visual: '🖼️ Visuel', auditory: '🎧 Auditif', kinesthetic: '✋ Kinesthésique', reading: '📖 Lecture' };
+  $('style-bars').innerHTML = styles.map(k => {
+    const v = s[k] || 0;
+    const pct = (v * 100).toFixed(0);
+    return `
+      <div class="style-row">
+        <div class="lbl">${labels[k]}</div>
+        <div class="bar"><div class="bar-inner ${k}-color" style="width:${pct}%"></div></div>
+        <div class="pct">${pct}%</div>
+      </div>`;
+  }).join('');
+}
+
+function renderStyleHint(dominant, hint) {
+  const badge = $('dominant-badge');
+  badge.textContent = dominant;
+  badge.className = 'dominant-badge dom-' + dominant;
+  if (hint) {
+    $('hint-text').textContent = hint;
+    $('hint-box').style.display = 'block';
+  } else {
+    $('hint-box').style.display = 'none';
+  }
+}
+
+function drawRadar(s) {
+  const canvas = $('radar-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth;
+  const H = canvas.height = 280;
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) * 0.32;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const styles = ['visual', 'auditory', 'kinesthetic', 'reading'];
+  const labels = ['Visuel', 'Auditif', 'Kinesthésique', 'Lecture'];
+  const values = styles.map(k => s[k] || 0);
+  const angles = styles.map((_, i) => -Math.PI / 2 + (i * 2 * Math.PI / 4));
+
+  // Concentric circles (4 levels = 25%, 50%, 75%, 100%)
+  ctx.strokeStyle = '#2a2f4a'; ctx.lineWidth = 1;
+  for (let i = 1; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * i / 4, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+
+  // Axes
+  for (const a of angles) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+    ctx.stroke();
+  }
+
+  // Filled polygon
+  ctx.beginPath();
+  for (let i = 0; i < 4; i++) {
+    const x = cx + R * values[i] * Math.cos(angles[i]);
+    const y = cy + R * values[i] * Math.sin(angles[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(124, 109, 250, 0.3)';
+  ctx.fill();
+  ctx.strokeStyle = '#7c6dfa'; ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Points + labels
+  ctx.font = '12px system-ui';
+  for (let i = 0; i < 4; i++) {
+    const a = angles[i];
+    const x = cx + R * values[i] * Math.cos(a);
+    const y = cy + R * values[i] * Math.sin(a);
+    ctx.fillStyle = STYLE_COLORS[styles[i]];
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill();
+
+    const lx = cx + (R + 28) * Math.cos(a);
+    const ly = cy + (R + 28) * Math.sin(a);
+    ctx.fillStyle = '#c4caea';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(labels[i], lx, ly);
+  }
+}
+
+// ── Recompute button ────────────────────────────────────────────────
+
+$('recompute-btn').addEventListener('click', async () => {
+  const btn = $('recompute-btn');
+  const status = $('recompute-status');
+  btn.disabled = true;
+  status.textContent = 'Calcul en cours…';
+  status.className = 'status-msg';
+  try {
+    const res = await fetch('/student/me/learning-style/recompute', {
+      method: 'POST', headers: authHeaders,
+    });
+    const data = await res.json();
+    if (data.status === 'updated') {
+      status.textContent = '✅ Profil mis à jour !';
+      await loadLearningStyle();
+    } else {
+      status.textContent = `ℹ️ ${data.message || 'Pas encore assez de données'}`;
+    }
+  } catch (e) {
+    status.textContent = '❌ Erreur';
+    status.className = 'status-msg error';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { status.textContent = ''; }, 4000);
+  }
+});
+
+$('vark-btn').addEventListener('click', () => {
+  window.location.href = '/static/vark.html';
+});
+
+// ── Bayesian posterior (M2) ─────────────────────────────────────────
+
+const BAYES_LABELS = {
+  visual: '🖼️ Visuel', auditory: '🎧 Auditif',
+  kinesthetic: '✋ Kinesthésique', reading: '📖 Lecture',
+};
+
+async function loadBayesPosterior() {
+  try {
+    const res = await fetch('/student/me/learning-style/bayes', { headers: authHeaders });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    renderBayesPosterior(data);
+  } catch (e) {
+    $('bayes-bars').innerHTML = '<div class="empty">Posterior indisponible.</div>';
+  }
+}
+
+function renderBayesPosterior(p) {
+  const conf = Number(p.confidence || 0);
+  const confPct = (conf * 100).toFixed(0);
+  $('bayes-confidence').textContent = `${confPct}%`;
+  $('bayes-conf-fill').style.width = `${confPct}%`;
+  $('bayes-nobs').textContent = `${p.n_observations || 0} observations comportementales`;
+
+  const dom = p.dominant || 'mixed';
+  const badge = $('bayes-dominant');
+  badge.textContent = BAYES_LABELS[dom] || dom;
+  badge.className = 'dominant-badge dom-' + dom;
+
+  // Per-dimension HDI bars
+  const styles = ['visual', 'auditory', 'kinesthetic', 'reading'];
+  $('bayes-bars').innerHTML = styles.map(s => {
+    const mean = Number((p.scores || {})[s] || 0);
+    const hdi = (p.hdi_95 || {})[s] || [0, 0];
+    const lo = Number(hdi[0] || 0);
+    const hi = Number(hdi[1] || 0);
+    const meanPct = (mean * 100).toFixed(0);
+    const loPct = (lo * 100);
+    const widthPct = Math.max(2, (hi - lo) * 100);
+    return `
+      <div class="bayes-row">
+        <div class="head">
+          <span class="name">${BAYES_LABELS[s]}</span>
+          <span class="summary">${meanPct}% <span style="opacity:.6">(${(lo*100).toFixed(0)}–${(hi*100).toFixed(0)}%)</span></span>
+        </div>
+        <div class="hdi-track">
+          <div class="hdi-band ${s}-bg" style="left:${loPct}%; width:${widthPct}%"></div>
+          <div class="hdi-mean ${s}-bg" style="left:calc(${meanPct}% - 1.5px); opacity: 1;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadCrossValidation() {
+  try {
+    const res = await fetch('/student/me/learning-style/cross-validate', { headers: authHeaders });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    renderCrossValidation(data);
+  } catch (e) {
+    $('xv-container').innerHTML = '';
+  }
+}
+
+function renderCrossValidation(d) {
+  if (d.status === 'no_data') {
+    $('xv-container').innerHTML = `
+      <div class="xv-box">
+        <div class="xv-head">
+          <span class="xv-status warn">🧠 Cross-validation indisponible</span>
+        </div>
+        <div class="xv-detail">
+          ${d.message || 'Fais le test VARK et accumule au moins 5 interactions pour activer la cross-validation comportement vs auto-évaluation.'}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const cosine = Number(d.cosine_similarity || 0);
+  const agreement = !!d.agreement;
+  const cls = agreement ? 'agree' : 'disagree';
+  const status = agreement
+    ? `<span class="xv-status ok">✓ Auto-évaluation cohérente avec ton comportement</span>`
+    : `<span class="xv-status warn">⚠ Légère divergence auto-évaluation / comportement</span>`;
+  const interpretation = cosine >= 0.85
+    ? "Excellente concordance — ton ressenti reflète bien ce que tu fais."
+    : cosine >= 0.5
+    ? "Concordance modérée — tu te connais à peu près."
+    : "Faible concordance — possible biais de désirabilité dans ton auto-évaluation, ou ton comportement n'est pas encore représentatif.";
+
+  $('xv-container').innerHTML = `
+    <div class="xv-box ${cls}">
+      <div class="xv-head">
+        ${status}
+        <span class="xv-cosine">cosine = ${cosine.toFixed(2)}</span>
+      </div>
+      <div class="xv-detail">
+        <strong>Comportemental :</strong> ${BAYES_LABELS[d.behavioral_dominant] || d.behavioral_dominant}
+        &nbsp;·&nbsp;
+        <strong>Auto-éval. VARK :</strong> ${BAYES_LABELS[d.self_report_dominant] || d.self_report_dominant}
+        <br>
+        <span style="color:#9aa1bf">${interpretation}</span>
+      </div>
+    </div>
+  `;
+}
+
+$('bayes-rebuild-btn').addEventListener('click', async () => {
+  const btn = $('bayes-rebuild-btn');
+  const status = $('bayes-rebuild-status');
+  btn.disabled = true;
+  status.textContent = 'Recalcul…';
+  status.className = 'status-msg';
+  try {
+    const res = await fetch('/student/me/learning-style/bayes/rebuild', {
+      method: 'POST', headers: authHeaders,
+    });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    renderBayesPosterior(data);
+    await loadCrossValidation();
+    status.textContent = '✅ Reconstruit !';
+  } catch (e) {
+    status.textContent = '❌ Erreur';
+    status.className = 'status-msg error';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { status.textContent = ''; }, 4000);
+  }
+});
+
+$('logout-btn').addEventListener('click', async () => {
+  await fetch('/auth/logout', { method: 'POST', headers: authHeaders });
+  localStorage.clear();
+  window.location.href = '/static/login.html';
+});
+
+window.addEventListener('resize', () => loadLearningStyle()); // redraw radar on resize
+
+loadProfile();
+loadLearningStyle();
+loadBayesPosterior();
+loadCrossValidation();
+</script>
+
+</body>
+</html>

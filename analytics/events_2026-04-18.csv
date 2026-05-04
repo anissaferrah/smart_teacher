@@ -1,0 +1,3 @@
+event_time,session_id,student_id,course_id,language,level,event_type,question,answer_length,stt_time,llm_time,tts_time,total_time,kpi_ok,subject,chapter_idx,section_idx,confidence,interruptions
+2026-04-18T19:00:29.446607,63040bb2-8c5f-4b7e-885d-5580bef22815,,6dad9867-3a96-46dd-bb7d-90c49625b227,en,lycée,quiz,,0,0.0,0.0,0.0,0.0,False,,1,1,0.0,0
+2026-04-18T19:01:31.864720,63040bb2-8c5f-4b7e-885d-5580bef22815,,6dad9867-3a96-46dd-bb7d-90c49625b227,en,lycée,quiz,,0,0.0,0.0,0.0,0.0,False,,1,1,0.0,0

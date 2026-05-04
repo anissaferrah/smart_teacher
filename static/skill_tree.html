@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Teacher — Skill Tree (Sprint 2)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f1419; color: #e1e8ed; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    header { background: #15202b; padding: 12px 20px; border-bottom: 1px solid #2c3640; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; font-weight: 600; color: #1da1f2; }
+    select, input, button { background: #192734; color: #e1e8ed; border: 1px solid #38444d; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+    button { background: #1da1f2; cursor: pointer; border: none; }
+    button:hover { background: #1a91da; }
+    .legend { display: flex; gap: 12px; margin-left: auto; font-size: 12px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.mastered { background: #4ade80; }
+    .dot.in_progress { background: #facc15; }
+    .dot.not_started { background: #94a3b8; }
+    .dot.locked { background: #475569; }
+    main { flex: 1; display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+    #cy { background: #0f1419; }
+    aside { background: #15202b; border-left: 1px solid #2c3640; padding: 16px; overflow-y: auto; }
+    .stats { background: #192734; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 13px; }
+    .stats div { display: flex; justify-content: space-between; padding: 2px 0; }
+    .stats .num { font-weight: 600; }
+    h2 { font-size: 13px; color: #1da1f2; margin: 12px 0 6px 0; text-transform: uppercase; letter-spacing: 0.04em; }
+    .reco-card, .selected-card { background: #192734; border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid transparent; }
+    .reco-card.recommended { border-color: #ff9500; box-shadow: 0 0 0 2px #ff9500; }
+    .reco-name { font-weight: 600; margin-bottom: 4px; }
+    .reco-meta { font-size: 11px; color: #8899a6; }
+    .reco-rationale { font-size: 12px; color: #c1c8cd; margin-top: 6px; }
+    .badge { display: inline-block; background: #38444d; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
+    .badge.mastered { background: #166534; color: #4ade80; }
+    .badge.in_progress { background: #713f12; color: #facc15; }
+    .badge.locked { background: #1e293b; color: #94a3b8; }
+    .empty { text-align: center; color: #8899a6; padding: 30px; font-size: 13px; }
+  </style>
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/layout-base/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script>
+    if (typeof cytoscape !== "undefined" && typeof cytoscapeFcose !== "undefined") {
+      cytoscape.use(cytoscapeFcose);
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>🎓 Skill Tree</h1>
+    <select id="course-select"><option value="">Charger…</option></select>
+    <input id="student-id" placeholder="student UUID (optionnel)" style="width:240px" />
+    <input id="chapter-idx" placeholder="ch idx (optionnel)" style="width:90px" type="number" />
+    <button id="reload">Charger</button>
+    <div class="legend">
+      <div class="legend-item"><span class="dot mastered"></span>Mastered</div>
+      <div class="legend-item"><span class="dot in_progress"></span>In progress</div>
+      <div class="legend-item"><span class="dot not_started"></span>Not started</div>
+      <div class="legend-item"><span class="dot locked"></span>Locked</div>
+    </div>
+  </header>
+  <main>
+    <div id="cy"></div>
+    <aside>
+      <div class="stats" id="stats">—</div>
+      <h2>🎯 Recommandé maintenant</h2>
+      <div id="reco-list" class="empty">Charge un cours pour voir les recommendations.</div>
+      <h2>Concept sélectionné</h2>
+      <div id="selected" class="empty">Clique un nœud du graphe.</div>
+    </aside>
+  </main>
+
+  <script>
+    const courseSelect = document.getElementById("course-select");
+    const studentInput = document.getElementById("student-id");
+    const chapterInput = document.getElementById("chapter-idx");
+    const reloadBtn = document.getElementById("reload");
+    const statsEl = document.getElementById("stats");
+    const recoEl = document.getElementById("reco-list");
+    const selectedEl = document.getElementById("selected");
+    let cy = null;
+    let recommendedSet = new Set();
+
+    const layoutConfig = {
+      name: "fcose", animate: true, animationDuration: 700,
+      idealEdgeLength: 100, nodeRepulsion: 8000, nodeSeparation: 150,
+      gravity: 0.25, padding: 30,
+    };
+
+    function colorFor(state, locked) {
+      if (locked) return "#475569";
+      if (state === "mastered") return "#4ade80";
+      if (state === "in_progress") return "#facc15";
+      return "#94a3b8";
+    }
+
+    const styleSheet = [
+      {
+        selector: "node",
+        style: {
+          "background-color": ele => colorFor(ele.data("state"), ele.data("locked")),
+          "label": "data(label)", "color": "#0f1419",
+          "text-valign": "center", "text-halign": "center",
+          "text-wrap": "wrap", "text-max-width": "120px",
+          "font-size": "11px", "font-weight": 600,
+          "width": "mapData(score, 0, 5, 36, 80)",
+          "height": "mapData(score, 0, 5, 36, 80)",
+          "border-width": 2, "border-color": "#1e293b",
+        },
+      },
+      { selector: "node:selected",
+        style: { "border-color": "#1da1f2", "border-width": 4, "color": "#fff" } },
+      { selector: "node.recommended",
+        style: { "border-color": "#ff9500", "border-width": 4 } },
+      { selector: "edge",
+        style: { "width": "mapData(weight, 1, 10, 1, 5)",
+                 "line-color": "#38444d", "curve-style": "bezier", "opacity": 0.5 } },
+    ];
+
+    async function loadCourseList() {
+      try {
+        const r = await fetch("/course/list");
+        const data = await r.json();
+        const courses = data.courses || data || [];
+        courseSelect.innerHTML = '<option value="">— Choisir un cours —</option>';
+        courses.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c.id || c.course_id;
+          opt.textContent = `${c.title || c.subject || "(sans titre)"} (${(c.id || "").slice(0, 8)})`;
+          courseSelect.appendChild(opt);
+        });
+      } catch (err) { console.error(err); }
+    }
+
+    async function loadTree() {
+      const courseId = courseSelect.value;
+      if (!courseId) return;
+      const studentId = studentInput.value.trim() || "00000000-0000-0000-0000-000000000000";
+      const chapterIdx = chapterInput.value.trim();
+
+      statsEl.textContent = "Chargement…";
+      try {
+        // Skill tree
+        const treeUrl = `/student/${studentId}/skill-tree?course_id=${courseId}`;
+        const treeR = await fetch(treeUrl);
+        if (!treeR.ok) {
+          const t = await treeR.text();
+          throw new Error(t);
+        }
+        const tree = await treeR.json();
+        renderStats(tree.stats);
+
+        // Recommendations
+        let recoUrl = `/student/${studentId}/recommend-next?course_id=${courseId}&top_k=3`;
+        if (chapterIdx) recoUrl += `&chapter_idx=${chapterIdx}`;
+        const recoR = await fetch(recoUrl);
+        const reco = recoR.ok ? await recoR.json() : { recommendations: [] };
+        renderRecommendations(reco.recommendations || []);
+        recommendedSet = new Set((reco.recommendations || []).map(r => r.label));
+
+        renderTree(tree);
+      } catch (err) {
+        statsEl.innerHTML = `<div class="empty">Erreur: ${err.message}</div>`;
+        console.error(err);
+      }
+    }
+
+    function renderStats(s) {
+      statsEl.innerHTML = `
+        <div><span>Total</span><span class="num">${s.total || 0}</span></div>
+        <div><span>🟢 Mastered</span><span class="num" style="color:#4ade80">${s.mastered || 0}</span></div>
+        <div><span>🟡 In progress</span><span class="num" style="color:#facc15">${s.in_progress || 0}</span></div>
+        <div><span>⚪ Not started</span><span class="num" style="color:#94a3b8">${s.not_started || 0}</span></div>
+        <div><span>🔒 Locked</span><span class="num" style="color:#475569">${s.locked || 0}</span></div>
+      `;
+    }
+
+    function renderRecommendations(recos) {
+      if (!recos.length) {
+        recoEl.innerHTML = '<div class="empty">Aucune recommendation (cours déjà maîtrisé ?)</div>';
+        return;
+      }
+      recoEl.innerHTML = "";
+      recos.forEach((r, i) => {
+        const card = document.createElement("div");
+        card.className = "reco-card recommended";
+        card.innerHTML = `
+          <div class="reco-name">${i + 1}. ${escapeHtml(r.canonical_name || r.name)}</div>
+          <div class="reco-meta">
+            mastery=${(r.mastery_score || 0).toFixed(2)} • bloom=${r.bloom_level || "?"} •
+            ch=${(r.chapter_idxs || []).join(",")}
+          </div>
+          <div class="reco-rationale">${escapeHtml(r.rationale || "")}</div>
+          ${r.description ? `<div class="reco-rationale" style="font-style:italic">${escapeHtml(r.description)}</div>` : ""}
+        `;
+        card.addEventListener("click", () => focusNode(r.label));
+        recoEl.appendChild(card);
+      });
+    }
+
+    function renderTree(tree) {
+      if (cy) cy.destroy();
+      cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements: [...(tree.nodes || []), ...(tree.edges || [])],
+        style: styleSheet,
+        layout: layoutConfig,
+        wheelSensitivity: 0.2,
+      });
+      // Mark recommended nodes
+      cy.nodes().forEach(n => {
+        if (recommendedSet.has(n.id())) n.addClass("recommended");
+      });
+      cy.on("tap", "node", evt => showSelected(evt.target.data()));
+    }
+
+    function focusNode(label) {
+      if (!cy) return;
+      const n = cy.getElementById(label);
+      if (n && n.length) {
+        cy.elements().unselect();
+        n.select();
+        cy.animate({ center: { eles: n }, zoom: 1.4 }, { duration: 600 });
+        showSelected(n.data());
+      }
+    }
+
+    function showSelected(d) {
+      const stateBadge = `<span class="badge ${d.state}">${d.state}</span>`;
+      const lockedBadge = d.locked ? `<span class="badge locked">🔒 locked</span>` : "";
+      const bloomBadge = d.bloom ? `<span class="badge">${d.bloom}</span>` : "";
+      const chapters = (d.chapters || []).map(c => `<span class="badge">Ch${c}</span>`).join("");
+      const weakPrereqs = (d.weak_prereqs || []).length
+        ? `<div style="margin-top:8px;font-size:12px;color:#facc15">⚠️ Prereqs manquants : ${d.weak_prereqs.join(", ")}</div>`
+        : "";
+      selectedEl.className = "selected-card";
+      selectedEl.innerHTML = `
+        <div class="reco-name">${escapeHtml(d.label || d.id)}</div>
+        <div class="reco-meta">mastery=${(d.mastery || 0).toFixed(2)} • score=${(d.score || 0).toFixed(2)}</div>
+        <div style="margin:6px 0">${stateBadge} ${lockedBadge} ${bloomBadge} ${chapters}</div>
+        ${d.description ? `<div style="font-size:12px;color:#c1c8cd;margin-top:6px">${escapeHtml(d.description)}</div>` : ""}
+        ${weakPrereqs}
+      `;
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s || "";
+      return div.innerHTML;
+    }
+
+    courseSelect.addEventListener("change", () => loadTree());
+    reloadBtn.addEventListener("click", () => loadTree());
+
+    loadCourseList();
+  </script>
+</body>
+</html>

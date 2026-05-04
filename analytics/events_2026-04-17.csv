@@ -1,0 +1,2 @@
+event_time,session_id,student_id,course_id,language,level,event_type,question,answer_length,stt_time,llm_time,tts_time,total_time,kpi_ok,subject,chapter_idx,section_idx,confidence,interruptions
+2026-04-17T14:19:24.898048,08711c7a-3abf-44df-9519-2c6dd7a150d4,,,en,lycée,qa,can you repat,1221,0,176.896,62.233,239.129,False,,0,0,0.0,0

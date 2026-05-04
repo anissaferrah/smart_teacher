@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pyflakes main.py rag/multimodal_rag.py handlers/audio_pipeline.py analyze_metrics.py)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | time %{time_total}s\\\\n\" --max-time 5 http://localhost:8000/health)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | time %{time_total}s\\\\n\" --max-time 5 http://localhost:8000/static/index.html)"
+    ]
+  }
+}

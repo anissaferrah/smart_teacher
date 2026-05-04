@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "a9394a13-1fbd-449d-abf3-54bd7131be0c",
+  "turn_id": 6,
+  "question_text": "autre exemple avec des dettaied plus",
+  "answer_text": "Pour donner un autre exemple de la recherche d'information (RI), imaginez-vous qu'un utilisateur cherche des informations sur un sujet spécifique, par exemple 'l'histoire de la France'. La RI va s'attaquer à cette requête en sélectionnant les documents pertinents dans le corpus de données disponibles. Cette sélection peut être faite grâce aux mots clés présents dans la requête. Par exemple, si un document contient des termes comme 'France', 'histoire' ou 'période révolutionnaire', il pourrait être considéré comme pertinent.",
+  "language": "fr",
+  "subject": "literature",
+  "chapter_title": "Chapitre 1 Introduction A La Ri",
+  "section_title": "II. DÉFINITIONS ET TERMINOLOGIE",
+  "chapter_index": 1,
+  "section_index": 2,
+  "char_position": 752,
+  "audio_answer_path": "turns/answers/a9394a13-1fbd-449d-abf3-54bd7131be0c/6_1777852100116.mp3"
+}

@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "79374b9a-c7ac-4508-98b4-b1ea21044b78",
+  "turn_id": 6,
+  "question_audio_path": "turns/questions/79374b9a-c7ac-4508-98b4-b1ea21044b78/6_1777894486283.webm",
+  "question_text": "tu peux répéter la définition de slide.",
+  "answer_text": "Bien sûr ! L'apprentissage supervisé (supervised learning) est une méthode où l'ordinateur apprend à partir d'exemples marqués par un enseignant. Cela signifie que pour chaque problème, il existe déjà une solution connue. Par exemple, dans le domaine de la reconnaissance de caractères (character recognition), les données d'entrée sont des images de caractères et les solutions correctes sont les lettres correspondantes : l'ordinateur apprend à reconnaitre les caractères en s'entraînant sur un grand nombre d'exemples.",
+  "language": "fr",
+  "subject": "slide",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 2,
+  "char_position": 1266,
+  "audio_answer_path": "turns/answers/79374b9a-c7ac-4508-98b4-b1ea21044b78/6_1777894486283.mp3"
+}

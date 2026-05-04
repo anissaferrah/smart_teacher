@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Teacher — Concept Graph (B4 POC)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f1419; color: #e1e8ed; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    header { background: #15202b; padding: 12px 20px; border-bottom: 1px solid #2c3640; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; font-weight: 600; color: #1da1f2; }
+    header .controls { display: flex; gap: 8px; align-items: center; flex: 1; }
+    select, input, button { background: #192734; color: #e1e8ed; border: 1px solid #38444d; padding: 6px 12px; border-radius: 6px; font-size: 14px; }
+    button { background: #1da1f2; cursor: pointer; border: none; }
+    button:hover { background: #1a91da; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stats { font-size: 13px; color: #8899a6; }
+    main { flex: 1; display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+    #cy { background: #0f1419; }
+    aside { background: #15202b; border-left: 1px solid #2c3640; padding: 16px; overflow-y: auto; }
+    aside h2 { font-size: 14px; font-weight: 600; color: #1da1f2; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .concept-card { background: #192734; border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid transparent; transition: all 0.15s; }
+    .concept-card:hover { border-color: #1da1f2; }
+    .concept-card.selected { border-color: #1da1f2; background: #1c2733; }
+    .concept-name { font-weight: 600; margin-bottom: 4px; color: #e1e8ed; }
+    .concept-meta { font-size: 12px; color: #8899a6; }
+    .badge { display: inline-block; background: #38444d; color: #e1e8ed; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 4px; margin-top: 4px; }
+    .empty { text-align: center; color: #8899a6; padding: 40px 20px; font-size: 13px; }
+    .loading { text-align: center; color: #1da1f2; padding: 40px; font-size: 14px; }
+    .error { background: #5a1a1a; border: 1px solid #ff6b6b; color: #ffb8b8; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 13px; }
+  </style>
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/layout-base/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script>
+    if (typeof cytoscape !== "undefined" && typeof cytoscapeFcose !== "undefined") {
+      cytoscape.use(cytoscapeFcose);
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>🧠 Concept Graph</h1>
+    <div class="controls">
+      <select id="course-select"><option value="">Charger la liste…</option></select>
+      <button id="refresh-btn">🔄 Re-extraire</button>
+      <span class="stats" id="stats">—</span>
+    </div>
+  </header>
+
+  <main>
+    <div id="cy"></div>
+    <aside>
+      <h2>Concepts détectés</h2>
+      <div id="concept-list" class="empty">Sélectionne un cours pour visualiser le graphe.</div>
+    </aside>
+  </main>
+
+  <script>
+    const courseSelect = document.getElementById("course-select");
+    const refreshBtn = document.getElementById("refresh-btn");
+    const statsEl = document.getElementById("stats");
+    const conceptList = document.getElementById("concept-list");
+    let cy = null;
+    let currentCourseId = null;
+
+    const layoutConfig = {
+      name: "fcose",
+      quality: "default",
+      randomize: true,
+      animate: true,
+      animationDuration: 700,
+      idealEdgeLength: 100,
+      nodeRepulsion: 8000,
+      nodeSeparation: 150,
+      gravity: 0.25,
+      padding: 30,
+    };
+
+    const styleSheet = [
+      {
+        selector: "node",
+        style: {
+          "background-color": "#1da1f2",
+          "label": "data(label)",
+          "color": "#e1e8ed",
+          "text-valign": "center",
+          "text-halign": "center",
+          "text-wrap": "wrap",
+          "text-max-width": "120px",
+          "font-size": "11px",
+          "width": "mapData(score, 0, 5, 30, 80)",
+          "height": "mapData(score, 0, 5, 30, 80)",
+          "border-width": 2,
+          "border-color": "#0c7abf",
+          "transition-property": "background-color, border-color",
+          "transition-duration": "0.15s",
+        },
+      },
+      {
+        selector: "node:selected",
+        style: { "background-color": "#ff9500", "border-color": "#cc7700" },
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": "mapData(weight, 1, 10, 1, 6)",
+          "line-color": "#38444d",
+          "curve-style": "bezier",
+          "opacity": 0.6,
+        },
+      },
+      {
+        selector: "edge:selected",
+        style: { "line-color": "#ff9500", "opacity": 1 },
+      },
+    ];
+
+    async function loadCourseList() {
+      try {
+        const r = await fetch("/course/list");
+        const data = await r.json();
+        const courses = data.courses || data || [];
+        courseSelect.innerHTML = '<option value="">— Choisir un cours —</option>';
+        courses.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c.id || c.course_id;
+          opt.textContent = `${c.title || c.subject || "(sans titre)"} (${c.id?.slice(0, 8) || ""})`;
+          courseSelect.appendChild(opt);
+        });
+      } catch (err) {
+        statsEl.textContent = "Erreur chargement liste cours";
+        console.error(err);
+      }
+    }
+
+    async function loadGraph(courseId, refresh = false) {
+      if (!courseId) return;
+      currentCourseId = courseId;
+      statsEl.textContent = "Extraction en cours…";
+      conceptList.innerHTML = '<div class="loading">⏳ KeyBERT extrait les concepts… (peut prendre 30-90s la 1re fois)</div>';
+      refreshBtn.disabled = true;
+
+      try {
+        const url = `/course/${courseId}/concept-graph${refresh ? "?refresh=true" : ""}`;
+        const r = await fetch(url);
+        if (!r.ok) {
+          const txt = await r.text();
+          throw new Error(`HTTP ${r.status}: ${txt}`);
+        }
+        const graph = await r.json();
+        renderGraph(graph);
+        renderConceptList(graph.concepts_detail || []);
+        statsEl.textContent = `${graph.nodes.length} concepts • ${graph.edges.length} edges • ${graph.total_chunks || "?"} chunks`;
+      } catch (err) {
+        conceptList.innerHTML = `<div class="error">❌ ${err.message}</div>`;
+        statsEl.textContent = "Erreur";
+        console.error(err);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    function renderGraph(graph) {
+      if (cy) cy.destroy();
+      cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements: [...(graph.nodes || []), ...(graph.edges || [])],
+        style: styleSheet,
+        layout: layoutConfig,
+        wheelSensitivity: 0.2,
+      });
+
+      cy.on("tap", "node", evt => {
+        const id = evt.target.id();
+        document.querySelectorAll(".concept-card").forEach(el => {
+          el.classList.toggle("selected", el.dataset.id === id);
+          if (el.dataset.id === id) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
+    }
+
+    function renderConceptList(concepts) {
+      if (!concepts.length) {
+        conceptList.innerHTML = '<div class="empty">Aucun concept extrait.</div>';
+        return;
+      }
+      conceptList.innerHTML = "";
+      concepts.forEach(c => {
+        // Schema KnowledgeGraph (Stage 3) :
+        //   c.name          = snake_case stable id (= ancien c.label)
+        //   c.display_name  = nom lisible (= ancien c.name)
+        //   c.canonical_name = forme canonique LLM (preferer si presente)
+        //   c.idea_count    = nb ideas dans le concept (= ancien chunks.length)
+        const conceptId = c.name;
+        const displayName = c.canonical_name || c.display_name || c.name;
+        const ideaCount = c.idea_count || (c.idea_ids ? c.idea_ids.length : 0);
+
+        const card = document.createElement("div");
+        card.className = "concept-card";
+        card.dataset.id = conceptId;
+        card.innerHTML = `
+          <div class="concept-name">${escapeHtml(displayName)}</div>
+          <div class="concept-meta">
+            score=${(c.score || 0).toFixed(2)} • ${ideaCount} idées
+            ${c.bloom_level ? ` • <em>${escapeHtml(c.bloom_level)}</em>` : ""}
+          </div>
+          ${c.description ? `<div class="concept-desc">${escapeHtml(c.description)}</div>` : ""}
+          <div>
+            ${(c.chapter_idxs || []).map(ci => `<span class="badge">Ch${ci}</span>`).join("")}
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          if (cy) {
+            const node = cy.getElementById(conceptId);
+            if (node && node.length) {
+              cy.elements().unselect();
+              node.select();
+              cy.animate({ center: { eles: node }, zoom: 1.5 }, { duration: 600 });
+            }
+          }
+          document.querySelectorAll(".concept-card").forEach(el => el.classList.remove("selected"));
+          card.classList.add("selected");
+        });
+        conceptList.appendChild(card);
+      });
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    courseSelect.addEventListener("change", e => loadGraph(e.target.value));
+    refreshBtn.addEventListener("click", () => loadGraph(currentCourseId, true));
+
+    loadCourseList();
+  </script>
+</body>
+</html>

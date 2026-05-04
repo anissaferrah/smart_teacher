@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Rapport de cours</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #0a0c14;
+    --panel: #14182a;
+    --panel2: #1a1f35;
+    --border: #2a2f4a;
+    --text: #e8ecff;
+    --muted: #8a93b8;
+    --accent: #7c6dfa;
+    --green: #00e5b0;
+    --yellow: #ffc857;
+    --red: #ff5e7a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(124, 109, 250, .12), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(0, 229, 176, .08), transparent 30%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 28px; border-bottom: 1px solid var(--border);
+    background: rgba(12, 15, 24, .76); backdrop-filter: blur(16px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .01em; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  header a, header button {
+    color: var(--text); text-decoration: none; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer; margin-left: 8px;
+  }
+  header a:hover, header button:hover { background: var(--panel); border-color: var(--accent); }
+
+  main {
+    max-width: 1200px; margin: 0 auto; padding: 28px 24px;
+  }
+
+  /* Hero — completion + status */
+  .hero {
+    display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: center;
+    padding: 28px; background: linear-gradient(135deg, var(--panel), var(--panel2));
+    border: 1px solid var(--border); border-radius: 18px;
+    margin-bottom: 24px;
+  }
+  .hero h2 { margin: 0 0 8px; font-size: 24px; font-weight: 700; }
+  .hero .course-title { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .hero .status { display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    background: rgba(124, 109, 250, .15); border: 1px solid rgba(124, 109, 250, .3);
+    color: var(--accent);
+  }
+  .hero .status.completed { background: rgba(0, 229, 176, .15); border-color: rgba(0, 229, 176, .3); color: var(--green); }
+  .hero .status.in_progress { background: rgba(255, 200, 87, .15); border-color: rgba(255, 200, 87, .3); color: var(--yellow); }
+
+  /* Big completion ring */
+  .ring { position: relative; width: 140px; height: 140px; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 10; }
+  .ring .bg { stroke: var(--panel2); }
+  .ring .fg { stroke: var(--accent); stroke-linecap: round;
+    transition: stroke-dasharray .8s cubic-bezier(.2, .8, .2, 1); }
+  .ring .label {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .ring .pct { font-size: 28px; font-weight: 700; line-height: 1; }
+  .ring .pct-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+
+  /* KPI grid */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px;
+  }
+  .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .08em; margin-bottom: 8px; }
+  .kpi .val { font-size: 26px; font-weight: 700; line-height: 1; }
+  .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  /* Two-column section */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px;
+  }
+  .card h3 { margin: 0 0 16px; font-size: 15px; font-weight: 600; color: #c4caea; }
+  .concept-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, .04);
+  }
+  .concept-row:last-child { border-bottom: none; }
+  .concept-name { font-weight: 500; font-size: 14px; }
+  .concept-bar { display: flex; align-items: center; gap: 12px; min-width: 140px; }
+  .bar-track { flex: 1; height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .6s; }
+  .bar-fill.high { background: var(--green); }
+  .bar-fill.med { background: var(--yellow); }
+  .bar-fill.low { background: var(--red); }
+  .score-pct { font-size: 12px; color: var(--muted); min-width: 38px; text-align: right; }
+
+  /* Badges row */
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .badge {
+    padding: 8px 14px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; font-size: 13px;
+  }
+
+  /* Next action CTA */
+  .cta {
+    background: linear-gradient(135deg, rgba(124, 109, 250, .15), rgba(0, 229, 176, .08));
+    border: 1px solid rgba(124, 109, 250, .3); border-radius: 14px; padding: 22px;
+    margin-bottom: 24px;
+  }
+  .cta h3 { margin: 0 0 6px; color: var(--accent); }
+  .cta p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .cta a {
+    display: inline-block; padding: 10px 18px; background: var(--accent);
+    color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;
+  }
+  .cta a:hover { background: #6a5ce8; }
+
+  .empty {
+    padding: 60px 20px; text-align: center; color: var(--muted);
+    background: var(--panel); border: 1px dashed var(--border); border-radius: 14px;
+  }
+  .err {
+    padding: 16px; background: rgba(255, 94, 122, .1); border: 1px solid rgba(255, 94, 122, .3);
+    color: var(--red); border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>📊 Rapport de cours</h1>
+      <div class="meta" id="userMeta">Chargement...</div>
+    </div>
+    <div>
+      <a href="/static/index.html">← Cours</a>
+      <a href="/static/profile.html">Mon profil</a>
+      <a href="/static/skill_tree.html" id="skillTreeLink">Skill tree</a>
+    </div>
+  </header>
+
+  <main id="content">
+    <div class="empty">⏳ Chargement du rapport...</div>
+  </main>
+
+<script>
+async function loadReport() {
+  const params = new URLSearchParams(location.search);
+  const courseId = params.get('course_id');
+  const main = document.getElementById('content');
+
+  if (!courseId) {
+    main.innerHTML = `
+      <div class="err">
+        Paramètre <code>course_id</code> manquant dans l'URL.<br>
+        Format attendu : <code>/static/course_report.html?course_id=&lt;UUID&gt;</code>
+      </div>`;
+    return;
+  }
+
+  try {
+    const r = await fetch(`/student/me/course-report?course_id=${courseId}`, {
+      credentials: 'include',
+    });
+    if (r.status === 401) {
+      main.innerHTML = `<div class="err">Non connecté. <a href="/static/login.html" style="color:var(--accent)">Se connecter</a></div>`;
+      return;
+    }
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`HTTP ${r.status}: ${txt}`);
+    }
+    const data = await r.json();
+    render(data);
+  } catch (err) {
+    main.innerHTML = `<div class="err">Erreur : ${escapeHtml(err.message || String(err))}</div>`;
+  }
+}
+
+function render(data) {
+  const main = document.getElementById('content');
+  const skillLink = document.getElementById('skillTreeLink');
+  if (skillLink) skillLink.href = `/static/skill_tree.html?course_id=${data.course_id}`;
+
+  // Update header meta
+  document.getElementById('userMeta').textContent =
+    `${data.course_title} — ${data.n_interactions} interactions, ${data.time_spent_min} min`;
+
+  const status = data.status || 'in_progress';
+  const pct = Math.round(data.completion_pct || 0);
+  const circumference = 2 * Math.PI * 60;
+  const dashOffset = circumference * (1 - pct / 100);
+
+  const statusLabels = {
+    completed:        '✅ Cours terminé',
+    near_completion:  '🚀 Presque fini',
+    in_progress:      '📚 En cours',
+    started:          '🌱 Démarré',
+  };
+
+  // Hero
+  let html = `
+    <div class="hero">
+      <div>
+        <h2>${escapeHtml(data.course_title || '(sans titre)')}</h2>
+        <div class="course-title">Course ID: <code>${data.course_id.slice(0, 16)}...</code></div>
+        <span class="status ${status}">${statusLabels[status] || status}</span>
+      </div>
+      <div class="ring">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle class="bg" cx="70" cy="70" r="60"/>
+          <circle class="fg" cx="70" cy="70" r="60"
+                  stroke-dasharray="${circumference}"
+                  stroke-dashoffset="${dashOffset}"/>
+        </svg>
+        <div class="label">
+          <div class="pct">${pct}%</div>
+          <div class="pct-label">Maîtrise</div>
+        </div>
+      </div>
+    </div>`;
+
+  // KPIs
+  html += `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="lbl">Concepts maîtrisés</div>
+        <div class="val">${data.mastery.mastered} / ${data.mastery.total}</div>
+        <div class="sub">${data.mastery.in_progress} en cours, ${data.mastery.not_started} restants</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Score moyen</div>
+        <div class="val">${(data.avg_score * 100).toFixed(0)}%</div>
+        <div class="sub">incluant propagation KG</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Confusion rate</div>
+        <div class="val">${(data.confusion_rate * 100).toFixed(1)}%</div>
+        <div class="sub">${data.n_interactions} interactions</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Temps passé</div>
+        <div class="val">${data.time_spent_min} min</div>
+        <div class="sub">${data.reviews_due} révisions dues</div>
+      </div>
+    </div>`;
+
+  // Badges
+  if (data.badges && data.badges.length) {
+    html += `<div class="badges">`;
+    for (const b of data.badges) {
+      html += `<span class="badge">${escapeHtml(b.label)}</span>`;
+    }
+    html += `</div>`;
+  }
+
+  // Next action
+  if (data.next_action) {
+    const a = data.next_action;
+    html += `
+      <div class="cta">
+        <h3>${escapeHtml(a.title)}</h3>
+        <p>${escapeHtml(a.body)}</p>
+        ${a.cta_url ? `<a href="${escapeHtml(a.cta_url)}">${escapeHtml(a.cta_label)}</a>` : ''}
+      </div>`;
+  }
+
+  // Strengths + weaknesses
+  html += `<div class="grid2">`;
+
+  html += `<div class="card"><h3>💪 Points forts</h3>`;
+  if (!data.top_strengths || !data.top_strengths.length) {
+    html += `<div style="color: var(--muted); font-size: 13px;">Pas encore de concept maîtrisé. Continue !</div>`;
+  } else {
+    for (const s of data.top_strengths) {
+      html += conceptRow(s, 'high');
+    }
+  }
+  html += `</div>`;
+
+  html += `<div class="card"><h3>📚 À renforcer</h3>`;
+  if (!data.top_weaknesses || !data.top_weaknesses.length) {
+    html += `<div style="color: var(--muted); font-size: 13px;">Aucun point faible identifié 🎉</div>`;
+  } else {
+    for (const w of data.top_weaknesses) {
+      const cls = w.score < 0.4 ? 'low' : 'med';
+      html += conceptRow(w, cls);
+    }
+  }
+  html += `</div>`;
+  html += `</div>`;
+
+  main.innerHTML = html;
+}
+
+function conceptRow(c, cls) {
+  const pct = Math.round(c.score * 100);
+  return `
+    <div class="concept-row">
+      <div class="concept-name">${escapeHtml(c.display || c.concept)}</div>
+      <div class="concept-bar">
+        <div class="bar-track">
+          <div class="bar-fill ${cls}" style="width: ${pct}%"></div>
+        </div>
+        <div class="score-pct">${pct}%</div>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+loadReport();
+</script>
+</body>
+</html>
