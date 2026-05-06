@@ -8,36 +8,18 @@ observable signals, (b) aligned with the pedagogical goal.
 
 For Smart Teacher, a "good" turn is one where :
 
-  - The student did **not** signal confusion afterwards (negative penalty
-    if they did).
-  - Their mastery on the targeted concept **moved toward 1**
-    (positive reward proportional to the gain).
-  - They **continued engaging** (positive small reward) — staying in the
-    session is itself a signal that the response wasn't off-putting.
+  - The student did **not** signal confusion afterwards.
+  - Their mastery on the targeted concept **moved toward 1**.
+  - They **continued engaging**.
 
-We combine these into a single scalar in [0, 1] :
+# The composite reward
 
-    reward = w_confusion · (1 - confusion_indicator)
-           + w_mastery   · clip(mastery_delta, 0, 1)
-           + w_engagement · engagement_indicator
+We combine three observable signals into a single scalar in [0, 1] :
 
-where the weights sum to 1 and are documented per signal.
+    reward = 0.50 × (1 − confusion) + 0.40 × Δm/0.30 + 0.10 × engaged
 
-# Why bounded in [0, 1]
-
-The Thompson sampling Beta posterior expects rewards in [0, 1]
-(Agrawal & Goyal 2013). Unbounded rewards would break the conjugate
-update we use in ``ArmPosterior.update``. We therefore clip mastery
-delta to a sensible per-turn range and normalize the components
-before combining.
-
-# Why these weights
-
-The weights below are explicit and documented. They are NOT magic
-numbers in the bad sense — they encode an editorial choice about what
-matters most in pedagogical terms (confusion avoidance > mastery
-progress > engagement). A future ablation study can compare these
-weights empirically once enough offline data is collected.
+Why bounded in [0, 1] : the Thompson sampling Beta posterior expects
+rewards in [0, 1] (Agrawal & Goyal 2013).
 """
 from __future__ import annotations
 
@@ -107,14 +89,12 @@ _MAX_DELTA = 0.30
 def compute_reward(outcome: TurnOutcome) -> float:
     """Map a TurnOutcome to a scalar reward in [0, 1].
 
-    Pure function — testable in isolation, no I/O. Logs the breakdown
-    at DEBUG level for observability.
+    Pure function — no DB I/O, no external state mutation. Logs the
+    breakdown for observability.
     """
     confusion_signal = 0.0 if outcome.confusion_detected else 1.0
-
     raw_delta = max(0.0, outcome.mastery_after - outcome.mastery_before)
     mastery_signal = min(raw_delta / _MAX_DELTA, 1.0)
-
     engagement_signal = 1.0 if outcome.engaged else 0.0
 
     reward = (
@@ -125,9 +105,7 @@ def compute_reward(outcome: TurnOutcome) -> float:
     reward = max(0.0, min(1.0, reward))
 
     log.debug(
-        "reward.compute confusion=%s Δm=%.3f engaged=%s → %.3f "
-        "(C=%.2f M=%.2f E=%.2f)",
-        outcome.confusion_detected, raw_delta, outcome.engaged, reward,
-        confusion_signal, mastery_signal, engagement_signal,
+        "reward.compute = %.3f | confused=%s Δm=%.3f engaged=%s",
+        reward, outcome.confusion_detected, raw_delta, outcome.engaged,
     )
     return reward

@@ -1188,6 +1188,303 @@ Résumé concis:"""
         log.info(f"✅ Cours sauvegardé : ID={course_id}")
         return course_id
 
+    # ── Multi-chapter ingestion : append to an existing course ──────────
+    #
+    # Why this exists : a "course" in the pedagogical sense (e.g. "Recherche
+    # d'Information") is normally split across MULTIPLE PDFs (Ch.1, Ch.2…).
+    # Each PDF should NOT create its own course_id — otherwise RAG retrieval
+    # filtered by course_id misses content from other chapters of the same
+    # logical course. The methods below let callers either (a) explicitly
+    # append to a known course_id, or (b) auto-group by (domain, subject)
+    # so a re-upload of the same course slug joins the existing course row.
+
+    # ── Title normalization (strip chapter markers) ─────────────────────
+    #
+    # Why : LLM classification is non-deterministic. Two PDFs of the same
+    # logical course can come back with different slugs ("recherche_information"
+    # vs "information_retrieval") or different titles ("Chapitre 1 — Recherche
+    # d'Information" vs "Cours RI - Partie 2"). Exact slug match alone misses
+    # these cases. We normalize the title (strip chapter markers, accents,
+    # punctuation) and use it as a robust grouping signal alongside the slug.
+
+    _CHAPTER_PREFIX_RE = re.compile(
+        r"^\s*(?:chapitre|chapter|chapt|chap|ch|"
+        r"part|partie|lecture|lec|section|sec|"
+        r"module|mod|tp|td|tdtp|unite|unit|"
+        r"cours|course|lesson|lecon)"
+        r"\s*[\-:.\s]?\s*(?:\d+|[ivxlc]+)\s*[\-:.\s]?\s*",
+        re.IGNORECASE,
+    )
+    _NUMERIC_PREFIX_RE = re.compile(
+        r"^\s*(?:\d+|[ivxlc]+)\s*[\-:.\s)]+\s*",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _normalize_course_title(cls, title: str) -> str:
+        """Strip chapter markers + accents + punctuation for fuzzy matching.
+
+        Examples
+        --------
+        ``"Chapitre 1 — Recherche d'Information"`` → ``"recherche d information"``
+        ``"Ch. 2 : Data Mining"``                  → ``"data mining"``
+        ``"Part III - NLP Basics"``                → ``"nlp basics"``
+        """
+        import unicodedata as _ud
+
+        if not title:
+            return ""
+        s = title.strip()
+
+        # Strip up to 2 chapter prefix patterns (handles "Chapitre 1 - 2.1 - Title")
+        for _ in range(2):
+            stripped = cls._CHAPTER_PREFIX_RE.sub("", s).strip()
+            if stripped == s:
+                stripped = cls._NUMERIC_PREFIX_RE.sub("", s).strip()
+            if stripped == s:
+                break
+            s = stripped
+
+        s = _ud.normalize("NFKD", s)
+        s = "".join(c for c in s if not _ud.combining(c))
+        s = s.lower()
+        s = re.sub(r"[^a-z0-9\s]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    async def find_existing_course_id(
+        self,
+        db,
+        domain: str,
+        subject: str | None = None,
+        course_data: dict | None = None,
+        rag=None,
+        fuzzy_threshold: float = 0.70,
+        embedding_threshold: float = 0.80,
+    ) -> tuple[str | None, str]:
+        """3-level smart matching to find an existing course this PDF
+        should join. Returns ``(course_id, reason)`` — reason is for
+        logging/debug ("slug-exact", "fuzzy-jaccard=0.83", etc.).
+
+        Resolution order (cheapest → most expensive) :
+
+          1. **Exact slug** : ``courses.subject == subject`` (same domain).
+             Cheap, but fails when LLM gives different slugs to the same
+             course across uploads.
+
+          2. **Normalized-title token Jaccard** : titles stripped of
+             chapter markers, accents, punctuation, then compared as
+             bag-of-words. Catches "Recherche d'Information" vs
+             "Recherche Information Cours" without any LLM call.
+
+          3. **BGE-m3 embedding cosine** : multilingual semantic match
+             via the RAG embedder (if provided). Catches cross-language
+             duplicates like "Recherche d'Information" ↔ "Information
+             Retrieval". Costs one embedding call per existing course
+             title (negligible, titles are short and N is tiny).
+
+        Returns ``(None, reason)`` if nothing matches above thresholds.
+        """
+        from sqlalchemy import select
+        from database.models import Course
+
+        # Level 1 : exact slug match
+        if subject and subject not in (DEFAULT_COURSE, "generic", ""):
+            stmt = (
+                select(Course.id)
+                .where(Course.domain == domain, Course.subject == subject)
+                .order_by(Course.created_at.asc())
+                .limit(1)
+            )
+            cid = (await db.execute(stmt)).scalar_one_or_none()
+            if cid:
+                return str(cid), f"slug-exact:{subject}"
+
+        # Need a title for fuzzy / embedding levels
+        new_title_raw = (course_data or {}).get("title") or ""
+        new_title = self._normalize_course_title(new_title_raw)
+        if not new_title:
+            return None, "no-title"
+
+        # Fetch all courses in this domain (small N — usually < 100)
+        stmt = (
+            select(Course.id, Course.title, Course.subject)
+            .where(Course.domain == domain)
+            .order_by(Course.created_at.asc())
+        )
+        candidates = list((await db.execute(stmt)).all())
+        if not candidates:
+            return None, "no-candidates"
+
+        cand_norm = [self._normalize_course_title(t or "") for _, t, _ in candidates]
+
+        # Level 2 : token Jaccard on normalized titles
+        new_tokens = set(new_title.split())
+        if new_tokens:
+            best_score = 0.0
+            best_idx = -1
+            for i, ct in enumerate(cand_norm):
+                ct_tokens = set(ct.split())
+                if not ct_tokens:
+                    continue
+                jaccard = len(new_tokens & ct_tokens) / len(new_tokens | ct_tokens)
+                if jaccard > best_score:
+                    best_score = jaccard
+                    best_idx = i
+            if best_idx >= 0 and best_score >= fuzzy_threshold:
+                cid = candidates[best_idx][0]
+                return str(cid), f"fuzzy-jaccard={best_score:.2f}:{cand_norm[best_idx][:40]}"
+
+        # Level 3 : BGE-m3 embedding cosine
+        if rag is not None and getattr(rag, "embeddings", None) is not None:
+            try:
+                new_emb = rag.embeddings.embed_query(new_title)
+                # Build a parallel list of (idx, embedding) skipping empty titles
+                idx_with_titles = [(i, ct) for i, ct in enumerate(cand_norm) if ct]
+                if idx_with_titles:
+                    cand_embs = rag.embeddings.embed_documents(
+                        [ct for _, ct in idx_with_titles]
+                    )
+
+                    def _cos(a, b):
+                        import math
+                        dp = sum(x * y for x, y in zip(a, b))
+                        na = math.sqrt(sum(x * x for x in a))
+                        nb = math.sqrt(sum(x * x for x in b))
+                        return dp / (na * nb) if na and nb else 0.0
+
+                    best_score = 0.0
+                    best_idx = -1
+                    for (i, ct), emb in zip(idx_with_titles, cand_embs):
+                        sim = _cos(new_emb, emb)
+                        if sim > best_score:
+                            best_score = sim
+                            best_idx = i
+                    if best_idx >= 0 and best_score >= embedding_threshold:
+                        cid = candidates[best_idx][0]
+                        return str(cid), f"embedding-cos={best_score:.2f}:{cand_norm[best_idx][:40]}"
+            except Exception as exc:    # noqa: BLE001
+                log.warning("find_existing_course_id : embedding level failed (%s) — skipping", exc)
+
+        return None, "no-match"
+
+    async def append_chapters_to_course(self, course_data: dict, db, course_id: str) -> int:
+        """Append chapters / sections / concepts from ``course_data`` into
+        an existing Course row. No new Course() created.
+
+        Chapter.order is auto-assigned to ``max(existing.order) + 1`` so new
+        chapters always land at the end of the course outline. Returns the
+        number of chapters added.
+        """
+        import uuid as _uuid_mod
+        from sqlalchemy import select, func
+        from database.models import Course, Chapter, Section, Concept
+
+        course = await db.get(Course, _uuid_mod.UUID(course_id))
+        if course is None:
+            raise ValueError(f"append_chapters_to_course : course_id not found : {course_id}")
+
+        res = await db.execute(
+            select(func.coalesce(func.max(Chapter.order), 0))
+            .where(Chapter.course_id == course.id)
+        )
+        next_order = int(res.scalar() or 0) + 1
+
+        slides = course_data.get("slides", [])
+        n_added = 0
+
+        for ch_data in course_data.get("chapters", []):
+            chapter = Chapter(
+                course_id=course.id,
+                title=ch_data["title"],
+                order=next_order,
+                summary=ch_data.get("summary", ""),
+            )
+            db.add(chapter)
+            await db.flush()
+            next_order += 1
+            n_added += 1
+
+            for i, sec_data in enumerate(ch_data.get("sections", [])):
+                section_order = sec_data.get("page_index") or sec_data.get("order") or (i + 1)
+                image_url = (sec_data.get("image_url") or "").strip()
+                if not image_url and section_order:
+                    slide_idx = int(section_order) - 1
+                    if 0 <= slide_idx < len(slides):
+                        image_url = slides[slide_idx]
+                if not image_url and i < len(slides):
+                    image_url = slides[i]
+                image_urls = sec_data.get("image_urls") or ([] if not image_url else [image_url])
+
+                section = Section(
+                    chapter_id=chapter.id,
+                    title=sec_data["title"],
+                    order=section_order,
+                    content=sec_data.get("content", ""),
+                    image_url=image_url,
+                    image_urls=image_urls,
+                    duration_s=sec_data.get("duration_s", 120),
+                )
+                db.add(section)
+                await db.flush()
+
+                for c_data in sec_data.get("concepts", []):
+                    db.add(Concept(
+                        section_id=section.id,
+                        term=c_data.get("term", ""),
+                        definition=c_data.get("definition", ""),
+                        example=c_data.get("example", ""),
+                        concept_type=c_data.get("type", "definition"),
+                    ))
+
+        await db.commit()
+        log.info(f"✅ Append : {n_added} chapter(s) added to course_id={course_id}")
+        return n_added
+
+    async def save_or_append_smart(
+        self,
+        course_data: dict,
+        db,
+        domain: str = DEFAULT_DOMAIN,
+        append_to: str | None = None,
+        auto_group: bool = True,
+        rag=None,
+    ) -> tuple[str, str]:
+        """Smart persistence : either CREATE a new course or APPEND to an
+        existing one. Returns ``(course_id, action)`` where action is one
+        of ``"created"`` / ``"appended:<reason>"``.
+
+        Resolution order :
+          1. Explicit ``append_to`` → APPEND to that course_id.
+          2. ``auto_group=True`` → call :meth:`find_existing_course_id`
+             with the 3-level matcher (slug → title fuzzy → embedding).
+             If a match is found, APPEND.
+          3. Otherwise → CREATE a new course.
+
+        ``rag`` is the optional RAG instance ; passing it enables the
+        embedding-similarity level of the matcher (multilingual via
+        BGE-m3). Without it, only slug + fuzzy levels are used.
+        """
+        if append_to:
+            await self.append_chapters_to_course(course_data, db, append_to)
+            return append_to, "appended:explicit"
+
+        if auto_group:
+            subject = course_data.get("subject") or ""
+            existing, reason = await self.find_existing_course_id(
+                db, domain,
+                subject=subject,
+                course_data=course_data,
+                rag=rag,
+            )
+            if existing:
+                log.info(f"🔗 Auto-group : appending to course_id={existing} (reason={reason})")
+                await self.append_chapters_to_course(course_data, db, existing)
+                return existing, f"appended:{reason}"
+
+        course_id = await self.save_to_database(course_data, db, domain=domain)
+        return course_id, "created"
+
     def _estimate_duration(self, text: str) -> int:
         """Estime une durée de lecture (en secondes) selon le nombre de mots."""
         words = len((text or "").split())

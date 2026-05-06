@@ -223,19 +223,19 @@ body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--tex
   <div class="logo">🎓 Smart Teacher</div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="sw('course')">📖 Cours</button>
-    <button class="nav-tab" onclick="sw('library')">📚 Mes Cours</button>
+    <button class="nav-tab" onclick="window.open('/static/courses.html','_blank')" title="Manage domains, subjects and courses">🗂️ Manage</button>
     <button class="nav-tab" id="quizBtn" onclick="askQuiz()" disabled>📝 Quiz</button>
     <button class="nav-tab" id="testerBtn" onclick="openInlineTest()" disabled title="Tester ta compréhension du concept courant">🎯 Tester</button>
     <button class="nav-tab" id="profileBtn" onclick="window.open('/static/profile.html','_blank')">👤 Profil</button>
     <button class="nav-tab" onclick="window.open('/static/skill_tree.html','_blank')">🌳 Skill Tree</button>
     <button class="nav-tab" onclick="window.open('/static/concept_graph.html','_blank')">🧠 Concept Graph</button>
+    <button class="nav-tab" onclick="window.open('/dashboard','_blank')">📊 Dashboard</button>
     <div class="nav-status">
       <div class="status-dot" id="sdot"></div>
       <span class="status-text" id="stxt">Connexion…</span>
       <span style="margin-left:8px;padding:2px 6px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:.65em;font-weight:700;letter-spacing:.02em">AGENTIC</span>
       <span id="confusionBadge" style="margin-left:8px;padding:2px 6px;border-radius:8px;background:rgba(255,94,122,0.06);color:var(--accent3);font-size:.72em;font-weight:700;display:none;">Confusion</span>
     </div>
-    <button class="nav-tab" onclick="window.open('/dashboard','_blank')">📊 Dashboard</button>
   </div>
 </div>
 <!-- Backend events overlay supprime (etait visible bottom-right) -->
@@ -381,12 +381,6 @@ body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--tex
     // Allow ?guest=1 query for legacy access — sinon login obligatoire
     if (!new URLSearchParams(location.search).has('guest')) {
       window.location.href = '/static/login.html';
-      return;
-    }
-  } else if (_u.account_level === 'admin' || _u.account_level === 'teacher') {
-    // Si admin landed here par erreur, redirige vers admin.html
-    if (!new URLSearchParams(location.search).has('student')) {
-      window.location.href = '/static/admin.html';
       return;
     }
   }
@@ -1216,6 +1210,33 @@ const typingEl=document.getElementById('typing-indicator');if(typingEl)typingEl.
 const turnId=++questionTurnSeq;activeQuestionTurnId=turnId;const chatArea=document.getElementById('qaM');chatAreaByTurnId.set(turnId,chatArea);pendingQuestionTextByTurnId.set(turnId,q);presentationStreamPaused=true;if(cCourse){savedChI=chI;savedSI=sI;clearSlideTimers();stopAud();send({type:'interrupt',turn_id:turnId});paused=true;syncPauseBtn();}startSess('fr','lycee');addM(chatArea,q,'s','Étudiant');const initialStateBubble=addStateChatMessage(chatArea,{type:'state_change',state:'LISTENING',details:{question_text:q},turn_id:turnId},getReasoningBubble(chatArea),null);if(initialStateBubble)reasoningMsgByTurnId.set(turnId,initialStateBubble);send({type:'text',turn_id:turnId,content:q,course_id:cCourseId||'',chapter_index:chI,section_index:sI,chapter:cCourse?.chapters?.[chI]?.title||'',section_title:curSlideTitle||'',slide_title:curSlideTitle||'',slide_content:curSlideText||'',slide_path:curSlidePath||'',image_url:curSlidePath||'',course_title:cCourse?.title||'',in_course:!!cCourse});}
 
 document.addEventListener('DOMContentLoaded',()=>{document.getElementById('cInput')?.addEventListener('keypress',e=>{if(e.key==='Enter')sendCT();});document.getElementById('qaIn')?.addEventListener('keypress',e=>{if(e.key==='Enter')sendQA();});});
+
+// Auto-start a course when index.html is opened with ?course_id=<UUID>
+// from the Course Manager (▶ Start button). Optional ?chapter=<N> picks
+// which chapter to start at (0-based ; defaults to 0).
+(function(){
+  const params = new URLSearchParams(location.search);
+  const cid = params.get('course_id');
+  if (!cid) return;
+  const wantedCh = Math.max(0, parseInt(params.get('chapter') || '0', 10) || 0);
+  const tryStart = () => {
+    if (typeof startCourse === 'function') {
+      startCourse(cid).then(() => {
+        // startCourse resets chI=0 then schedules presentSec() in 600ms.
+        // Override chI BEFORE that timer fires so the player opens at the
+        // requested chapter instead of chapter 0.
+        if (wantedCh > 0 && typeof cCourse === 'object' && cCourse) {
+          const maxCh = (cCourse.chapters?.length || 1) - 1;
+          chI = Math.min(wantedCh, maxCh);
+          sI = 0;
+        }
+      });
+    } else {
+      setTimeout(tryStart, 200);
+    }
+  };
+  document.addEventListener('DOMContentLoaded', () => setTimeout(tryStart, 400));
+})();
 
 let audioUnlocked=false;
 function unlockAudio(){if(audioUnlocked)return;audioUnlocked=true;try{const ac2=new(window.AudioContext||window.webkitAudioContext)();if(ac2.state==='suspended')ac2.resume();}catch(e){}}

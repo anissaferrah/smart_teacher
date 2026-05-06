@@ -268,8 +268,9 @@ async def ingest_files(
     if not files:
         raise HTTPException(status_code=400, detail="Aucun fichier fourni")
 
-    upload_dir = Path("courses")
-    upload_dir.mkdir(exist_ok=True)
+    # All persistent uploads live under media/ (legacy "courses/" is read-only).
+    upload_dir = Path("media/courses/uploaded")
+    upload_dir.mkdir(parents=True, exist_ok=True)
     saved_paths = []
 
     for f in files:

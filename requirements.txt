@@ -14,6 +14,10 @@ requests
 httpx
 websockets
 
+acynpg
+redis
+bcrypt
+pyjwt
 # ── Auth / security ──────────pi
 clickhouse-connect
 
@@ -122,3 +126,4 @@ pikepdf
 #  - Ollama              : local LLM fallback (text=mistral, vision=llava:7b)
 #  - Tesseract OCR       : install tesseract-ocr binary on host
 # ═══════════════════════════════════════════════════════════════════════
+pydantic[email]
