@@ -23,10 +23,14 @@ _concept_graph_cache: dict[str, dict] = {}
 
 @router.post("/course/build")
 async def build_course(
-    files:    list[UploadFile] = File(...),
-    language: str              = Form("fr"),
-    level:    str              = Form("lycée"),
-    domain:   str              = Form("general"),
+    files:                list[UploadFile] = File(...),
+    language:             str              = Form("fr"),
+    level:                str              = Form("lycée"),
+    domain:               str              = Form("general"),
+    append_to_course_id:  str | None       = Form(None),
+    course_title:         str | None       = Form(None),
+    course_slug:          str | None       = Form(None),
+    auto_group:           bool             = Form(True),
 ):
     """Upload PDF/DOCX/PPTX → structure en cours présentable. PostgreSQL + RAG + slides PNG.
 
@@ -34,24 +38,93 @@ async def build_course(
     (set by the teacher at upload time) — they drive the narration's
     language and the depth/vocabulary of explanations. The same PDF
     can be uploaded twice with different (language, level) tuples
-    if different audiences need different versions. The student
-    profile's ``preferred_language`` is informational and does not
-    override the course's narration language.
+    if different audiences need different versions.
+
+    Multi-chapter courses :
+      - ``append_to_course_id`` (UUID, optional) : explicitly add this PDF
+        as a new chapter to an existing course. Skips course creation.
+      - ``course_title`` (optional) : override the auto-detected title
+        when CREATING a new course (ignored when appending).
+      - ``auto_group`` (default True) : when no ``append_to_course_id`` is
+        given, look for an existing course with the same (domain, subject)
+        slug and append to it instead of creating a duplicate. Set to
+        False to force a new course.
     """
     from pedagogy.course_builder import CourseBuilder
     from database.init_db import AsyncSessionLocal
-    from core.domains_config import auto_detect_course, classify_course_via_llm
+    from sqlalchemy import select
+    from database.models import Course
 
     rag = deps.get_rag()
 
     if not files:
-        raise HTTPException(status_code=400, detail="Aucun fichier fourni")
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    builder = CourseBuilder()
+
+    # ── Resolve target_domain / target_course (the slug pair used both
+    # for storage layout and DB metadata). The caller MUST provide the
+    # context — there is no LLM-classifier or file-path heuristic anymore.
+    #
+    # 2 valid input shapes :
+    #
+    #   A. APPEND : caller supplies ``append_to_course_id`` → we look
+    #      up that Course row and reuse its (domain, subject).
+    #
+    #   B. NEW    : caller supplies ``domain`` + (``course_slug`` or
+    #      ``course_title``). The slug is built from whichever of those
+    #      two is present.
+    #
+    # Anything else is rejected with 400 — we no longer guess.
+
+    target_domain: str
+    target_course: str
+
+    # ``next_chapter_idx`` = order of the NEXT course to add (each uploaded
+    # PDF is, in the user-facing vocabulary, a "course" inside a subject).
+    # For NEW subjects this starts at 1; for APPEND we look up
+    # max(Chapter.order)+1 so every PDF lands in its own course_N/ folder
+    # (no PNG collisions between PDFs sharing the same logical subject).
+    next_chapter_idx: int = 1
+
+    if append_to_course_id:
+        from sqlalchemy import func
+        from database.models import Chapter
+        try:
+            async with AsyncSessionLocal() as db:
+                row = (await db.execute(
+                    select(Course.domain, Course.subject).where(Course.id == uuid.UUID(append_to_course_id))
+                )).first()
+                if row is not None:
+                    next_chapter_idx = int((await db.execute(
+                        select(func.coalesce(func.max(Chapter.order), 0))
+                        .where(Chapter.course_id == uuid.UUID(append_to_course_id))
+                    )).scalar() or 0) + 1
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid append_to_course_id: {exc}")
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Course not found: {append_to_course_id}")
+        target_domain, target_course = row[0] or "general", row[1] or "generic"
+    else:
+        if not domain or domain == "general":
+            raise HTTPException(status_code=400, detail="Missing 'domain' (must be created via the Course Manager UI)")
+        if not (course_slug or course_title):
+            raise HTTPException(status_code=400, detail="Missing 'course_slug' or 'course_title'")
+        target_domain = builder._course_slug(domain, domain)
+        slug_seed = course_slug or course_title
+        target_course = builder._course_slug(slug_seed, slug_seed, domain=target_domain)
+
+    log.info(f"🎯 Resolved context : domain={target_domain} subject={target_course} starting at course_{next_chapter_idx}")
 
     results = []
     files_to_index: list[dict] = []
-    builder = CourseBuilder()
 
     for f in files:
+        # Each file in this batch lands in its OWN course_N/ folder so
+        # PNG slides from one PDF never overwrite PNG slides from another.
+        target_chapter = f"course_{next_chapter_idx}"
+        next_chapter_idx += 1
+
         raw_upload_name = (f.filename or "upload.pdf").replace("\\", "/")
         upload_filename = Path(raw_upload_name).name or f"upload_{uuid.uuid4().hex[:8]}.pdf"
         payload = await f.read()
@@ -62,40 +135,16 @@ async def build_course(
                 tmp.write(payload)
                 temp_path = Path(tmp.name)
 
-            detected_domain, detected_course = auto_detect_course(str(temp_path))
-
-            llm_title_hint: str | None = None
-            if detected_domain == "general" and detected_course == "generic" and domain == "general":
-                llm_classification = classify_course_via_llm(str(temp_path), max_pages=2)
-                if llm_classification:
-                    detected_domain = llm_classification["domain"]
-                    detected_course = llm_classification["course"]
-                    llm_title_hint = llm_classification["title"]
-                    log.info(
-                        f"🤖 Domaine/cours auto-classifies par LLM : "
-                        f"{detected_domain}/{detected_course} ('{llm_title_hint}')"
-                    )
-
-            target_domain = detected_domain if detected_domain != "general" else domain
-            fallback_course = detected_course if detected_course != "generic" else None
-            if fallback_course is None and upload_filename:
-                stem_hint = Path(upload_filename).stem
-                if not builder._looks_like_chapter(stem_hint):
-                    fallback_course = stem_hint
-
-            target_domain, target_course, target_chapter = builder.infer_upload_context(
-                raw_upload_name,
-                fallback_domain=target_domain,
-                fallback_course=fallback_course,
-                fallback_chapter="chapter_1",
-            )
-
-            target_dir = Path("courses") / target_domain / target_course / target_chapter
+            # All persistent course assets live under ``media/`` so the
+            # FastAPI StaticFiles mount (``/media``) can serve them.
+            #   - PDFs / DOCX / PPTX  → media/courses/<domain>/<course>/<chapter>/
+            #   - Rendered slide PNGs → media/slides/<domain>/<course>/<chapter>/
+            target_dir = Path("media/courses") / target_domain / target_course / target_chapter
             target_dir.mkdir(parents=True, exist_ok=True)
             dest = target_dir / upload_filename
             temp_path.replace(dest)
 
-            log.info(f"📁 Sauvegarde cours : {dest}")
+            log.info(f"📁 Course file saved : {dest}")
 
             # 0. Ingestion intelligente multi-format
             from pedagogy.intelligent_ingester import IntelligentIngester
@@ -126,7 +175,8 @@ async def build_course(
                     f"[Page {p['page_num']}]\n{p['text']}"
                     for p in ingestion.pages if p.get("text", "").strip()
                 )
-                title_hint = llm_title_hint or Path(dest).stem
+                # No LLM classifier — fall back to the file stem only.
+                title_hint = Path(dest).stem
                 log.info(f"📚 Building from {file_ext} via build_from_text ({len(aggregated_text)} chars)")
                 course_data = await builder.build_from_text(
                     text=aggregated_text, title=title_hint,
@@ -161,11 +211,28 @@ async def build_course(
                     "language_detected": ingestion.language,
                 }
 
+            # Override course title only when CREATING (not when appending —
+            # the existing course already has its own title and we shouldn't
+            # silently rename it from a chapter upload).
+            if course_title and not append_to_course_id:
+                course_data["title"] = course_title
+
             course_id = None
+            db_action = None      # "created" | "appended"
             db_error = None
             try:
                 async with AsyncSessionLocal() as db:
-                    course_id = await builder.save_to_database(course_data, db, domain=target_domain)
+                    course_id, db_action = await builder.save_or_append_smart(
+                        course_data, db,
+                        domain=target_domain,
+                        append_to=append_to_course_id,
+                        auto_group=auto_group,
+                        rag=rag,    # enables embedding-similarity matching
+                    )
+                log.info(
+                    f"💾 Course persisted ({db_action}) : id={course_id} "
+                    f"domain={target_domain} subject={course_data.get('subject')}"
+                )
             except Exception as exc:
                 db_error = str(exc)
                 log.info(f"ℹ️ PostgreSQL indisponible pour {f.filename}: {exc}")
@@ -204,6 +271,7 @@ async def build_course(
                 "title": course_data.get("title"), "chapters": chapters, "sections": sections,
                 "domain": target_domain, "course": target_course, "chapter": target_chapter,
                 "storage_path": str(dest),
+                "db_action": db_action,    # "created" | "appended" | None on error
                 "status": "ok" if db_error is None else "partial", "db_error": db_error,
             })
 
@@ -249,11 +317,146 @@ async def list_courses():
             return {
                 "courses": [{
                     "id": str(c.id), "title": c.title, "subject": c.subject,
-                    "language": c.language, "level": c.level,
+                    "domain": c.domain, "language": c.language, "level": c.level,
                 } for c in courses]
             }
     except Exception as exc:
         return {"courses": [], "error": str(exc)}
+
+
+# ── /course/tree ──────────────────────────────────────────────────────
+
+@router.get("/course/tree")
+async def list_courses_tree():
+    """Hierarchical view of all courses : Domain → Course (subject) → Chapters.
+
+    Returned shape mirrors the courses.html admin tree :
+
+        {
+          "tree": [
+            {
+              "domain": "informatique",
+              "courses": [
+                {
+                  "id": "uuid", "title": "Python Basics", "subject": "python_basics",
+                  "language": "fr", "level": "lycée",
+                  "chapters": [
+                    {"id": "...", "title": "Intro Python", "order": 1, "section_count": 12},
+                    ...
+                  ]
+                },
+                ...
+              ]
+            },
+            ...
+          ]
+        }
+    """
+    from sqlalchemy import select, func
+    from database.init_db import AsyncSessionLocal
+    from database.models import Course, Chapter, Section
+
+    try:
+        async with AsyncSessionLocal() as db:
+            # Count sections per chapter in one shot
+            section_count_q = (
+                select(Section.chapter_id, func.count(Section.id).label("n"))
+                .group_by(Section.chapter_id)
+            )
+            sec_count_map = {r[0]: r[1] for r in (await db.execute(section_count_q)).all()}
+
+            chapters_q = (
+                select(Chapter.id, Chapter.course_id, Chapter.title, Chapter.order)
+                .order_by(Chapter.course_id, Chapter.order)
+            )
+            chapters_by_course: dict[str, list[dict]] = {}
+            for cid, course_id, title, order in (await db.execute(chapters_q)).all():
+                chapters_by_course.setdefault(str(course_id), []).append({
+                    "id": str(cid),
+                    "title": title,
+                    "order": order,
+                    "section_count": sec_count_map.get(cid, 0),
+                })
+
+            courses_q = (
+                select(Course.id, Course.title, Course.subject, Course.domain,
+                       Course.language, Course.level, Course.created_at)
+                .order_by(Course.domain.asc(), Course.created_at.asc())
+            )
+            tree_by_domain: dict[str, list[dict]] = {}
+            for cid, title, subject, domain, language, level, created in (
+                await db.execute(courses_q)
+            ).all():
+                domain = domain or "general"
+                tree_by_domain.setdefault(domain, []).append({
+                    "id": str(cid),
+                    "title": title,
+                    "subject": subject,
+                    "language": language,
+                    "level": level,
+                    "created_at": created.isoformat() if created else None,
+                    "chapters": chapters_by_course.get(str(cid), []),
+                })
+
+            return {
+                "tree": [
+                    {"domain": d, "courses": cs}
+                    for d, cs in sorted(tree_by_domain.items())
+                ],
+            }
+    except Exception as exc:
+        log.exception("course/tree failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── /course/{id} delete ───────────────────────────────────────────────
+
+@router.delete("/course/{course_id}")
+async def delete_course(course_id: str):
+    """Delete a course and all its chapters/sections/concepts (cascade).
+
+    Also clears its chunks from Qdrant (filtered by course_id) and the
+    RAG in-memory cache. RAG-side cleanup is best-effort : if it fails
+    the DB row is still gone but stale chunks may linger until the next
+    full reset.
+    """
+    import uuid as _uuid_mod
+    from sqlalchemy import select
+    from database.init_db import AsyncSessionLocal
+    from database.models import Course
+
+    try:
+        cid = _uuid_mod.UUID(course_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="invalid course_id (UUID)")
+
+    rag = deps.get_rag()
+    try:
+        async with AsyncSessionLocal() as db:
+            course = (await db.execute(select(Course).where(Course.id == cid))).scalar_one_or_none()
+            if course is None:
+                raise HTTPException(status_code=404, detail="course not found")
+            await db.delete(course)
+            await db.commit()
+
+        # Best-effort RAG cleanup
+        try:
+            if hasattr(rag, "delete_by_course_id"):
+                rag.delete_by_course_id(course_id)
+            elif getattr(rag, "all_docs", None):
+                rag.all_docs = [
+                    d for d in rag.all_docs
+                    if (d.metadata or {}).get("course_id") != course_id
+                ]
+        except Exception as exc:    # noqa: BLE001
+            log.warning("RAG cleanup failed for %s : %s", course_id, exc)
+
+        return {"deleted": course_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("course delete failed")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── /course/{id}/structure ────────────────────────────────────────────

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Course Manager</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0b0d16; color: #e8ecff; margin: 0; }
+
+  header { background: #161928; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2f4a; position: sticky; top: 0; z-index: 50; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header h1 .crumb { color: #9aa1bf; font-weight: 400; margin-left: 8px; font-size: 13px; }
+  header .meta  { font-size: 13px; color: #9aa1bf; }
+  header button { background: #2a2f4a; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  header a.nav-link { color: #6ec1ff; text-decoration: none; margin-right: 16px; font-size: 13px; }
+  header a.nav-link:hover { text-decoration: underline; }
+
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+  .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+  .toolbar .grow { flex: 1; }
+  .btn { background: #2a2f4a; color: #fff; border: 0; padding: 9px 16px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.15s; }
+  .btn:hover { background: #3a3f5a; }
+  .btn.primary { background: linear-gradient(135deg, #7c6dfa 0%, #5b4ae0 100%); }
+  .btn.primary:hover { background: linear-gradient(135deg, #8c7dff 0%, #6b5af0 100%); }
+  .btn.danger  { background: #5a2a3a; color: #ff8888; }
+  .btn.danger:hover { background: #7a3a4a; color: #ffaaaa; }
+  .btn.ghost { background: transparent; border: 1px solid #2a2f4a; }
+  .btn.ghost:hover { background: #1a1d33; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+
+  .empty { text-align: center; padding: 60px 20px; color: #9aa1bf; }
+  .empty .ico { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+
+  /* Tree */
+  .tree { display: flex; flex-direction: column; gap: 12px; }
+
+  .domain-card { background: #161928; border: 1px solid #2a2f4a; border-radius: 10px; overflow: hidden; }
+  .domain-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; user-select: none; }
+  .domain-head:hover { background: #1a1d33; }
+  .domain-head .chev { transition: transform 0.2s; color: #9aa1bf; }
+  .domain-card.open .domain-head .chev { transform: rotate(90deg); }
+  .domain-head .icon { font-size: 22px; }
+  .domain-head .title { font-weight: 600; font-size: 15px; }
+  .domain-head .count { color: #9aa1bf; font-size: 12px; margin-left: auto; }
+  .domain-body { display: none; padding: 0 18px 16px 50px; gap: 10px; flex-direction: column; }
+  .domain-card.open .domain-body { display: flex; }
+
+  .subject-card { background: #1a1d33; border: 1px solid #2a2f4a; border-radius: 8px; }
+  .subject-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
+  .subject-head:hover { background: #1f2240; }
+  .subject-head .chev { transition: transform 0.2s; color: #9aa1bf; font-size: 11px; }
+  .subject-card.open .subject-head .chev { transform: rotate(90deg); }
+  .subject-head .ico { font-size: 18px; }
+  .subject-head .title { font-weight: 500; }
+  .subject-head .meta { color: #9aa1bf; font-size: 11px; margin-left: auto; }
+  .subject-head .actions { display: flex; gap: 4px; margin-left: 12px; }
+
+  .subject-body { display: none; padding: 6px 14px 14px 38px; }
+  .subject-card.open .subject-body { display: block; }
+
+  .course-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+  .course-row:hover { background: #22264a; }
+  .course-row .ico { font-size: 14px; }
+  .course-row .order { color: #6ec1ff; font-weight: 600; min-width: 22px; }
+  .course-row .title { flex: 1; }
+  .course-row .secs { color: #9aa1bf; font-size: 11px; }
+
+  .add-pdf-row { margin-top: 8px; padding: 10px; border: 1px dashed #2a2f4a; border-radius: 6px; text-align: center; color: #6ec1ff; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .add-pdf-row:hover { border-color: #7c6dfa; color: #b9b1ff; background: #1a1d33; }
+  .add-pdf-row.drag-over { border-color: #7c6dfa; background: #221d3f; color: #fff; }
+
+  .add-subject-row { margin-top: 8px; padding: 8px; text-align: center; color: #9aa1bf; font-size: 12px; }
+  .add-subject-row .btn { font-size: 12px; }
+
+  /* Modal */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); align-items: center; justify-content: center; z-index: 100; }
+  .modal.show { display: flex; }
+  .modal-card { background: #0e1120; max-width: 520px; width: 92%; border-radius: 12px; padding: 24px 28px; border: 1px solid #2a2f4a; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .modal-card h2 { margin: 0 0 6px; font-size: 18px; }
+  .modal-card .sub { color: #9aa1bf; font-size: 13px; margin-bottom: 20px; }
+  .modal-card label { display: block; font-size: 12px; color: #c4caea; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .modal-card input[type=text],
+  .modal-card select { width: 100%; padding: 10px 12px; background: #161928; border: 1px solid #2a2f4a; border-radius: 6px; color: #fff; font-size: 14px; font-family: inherit; }
+  .modal-card input[type=text]:focus,
+  .modal-card select:focus { border-color: #7c6dfa; outline: none; }
+  .modal-card .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+
+  .filedrop { margin-top: 6px; padding: 28px; border: 2px dashed #2a2f4a; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.15s; }
+  .filedrop:hover, .filedrop.drag-over { border-color: #7c6dfa; background: #1a1d33; }
+  .filedrop .ico { font-size: 36px; margin-bottom: 8px; opacity: 0.7; }
+  .filedrop .label { color: #c4caea; font-size: 13px; }
+  .filedrop .files { margin-top: 10px; font-size: 12px; color: #6ec1ff; }
+  .filedrop input[type=file] { display: none; }
+
+  /* Progress overlay */
+  .progress-overlay { display: none; position: fixed; inset: 0; background: rgba(11, 13, 22, 0.92); align-items: center; justify-content: center; z-index: 200; flex-direction: column; gap: 18px; }
+  .progress-overlay.show { display: flex; }
+  .spinner { width: 56px; height: 56px; border: 4px solid #2a2f4a; border-top-color: #7c6dfa; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-overlay .title { font-size: 16px; font-weight: 600; }
+  .progress-overlay .step { color: #9aa1bf; font-size: 13px; max-width: 420px; text-align: center; }
+
+  /* Toast */
+  .toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 300; }
+  .toast { background: #161928; border-left: 4px solid #7c6dfa; padding: 12px 18px; border-radius: 6px; max-width: 360px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: slideIn 0.3s; }
+  .toast.success { border-left-color: #4ade80; }
+  .toast.error   { border-left-color: #f87171; }
+  .toast .t-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .toast .t-msg   { font-size: 12px; color: #9aa1bf; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📚 Course Manager <span class="crumb" id="crumb">— loading…</span></h1>
+  <div>
+    <a class="nav-link" href="/static/index.html">🏠 Home</a>
+    <span class="meta" id="user-email">…</span>
+    &nbsp;·&nbsp;
+    <button id="logout-btn">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button class="btn primary" id="add-domain-btn">+ Add Domain</button>
+    <button class="btn ghost" id="refresh-btn">↻ Refresh</button>
+    <div class="grow"></div>
+  </div>
+
+  <div id="tree" class="tree">
+    <div class="empty"><div class="ico">⏳</div>Loading…</div>
+  </div>
+</main>
+
+<!-- Add Domain Modal -->
+<div class="modal" id="modal-domain">
+  <div class="modal-card">
+    <h2>Add Domain</h2>
+    <div class="sub">A domain groups several subjects together (e.g. Computer Science, Mathematics, Physics).</div>
+    <label for="d-name">Domain name</label>
+    <input type="text" id="d-name" placeholder="e.g. Computer Science" autofocus>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary" id="d-confirm">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Subject Modal -->
+<div class="modal" id="modal-subject">
+  <div class="modal-card">
+    <h2>Add Subject</h2>
+    <div class="sub">A subject groups several courses (PDFs) under a domain. You will upload the PDFs in the next step.</div>
+    <label>Domain</label>
+    <input type="text" id="s-domain" disabled>
+    <label for="s-title">Subject name</label>
+    <input type="text" id="s-title" placeholder="e.g. Python Basics" autofocus>
+    <div class="row2">
+      <div>
+        <label for="s-language">Language</label>
+        <select id="s-language">
+          <option value="en" selected>🇬🇧 English</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="ar">🇩🇿 العربية</option>
+          <option value="es">🇪🇸 Español</option>
+        </select>
+      </div>
+      <div>
+        <label for="s-level">Level</label>
+        <select id="s-level">
+          <option value="middle_school">Middle School</option>
+          <option value="high_school" selected>High School</option>
+          <option value="university">University</option>
+          <option value="master">Master</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary" id="s-confirm">Create (empty)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Course (PDF) Modal -->
+<div class="modal" id="modal-upload">
+  <div class="modal-card">
+    <h2>Upload Course (PDF)</h2>
+    <div class="sub" id="u-context">Add a PDF to the selected subject.</div>
+    <label>PDF file(s)</label>
+    <div class="filedrop" id="u-drop">
+      <div class="ico">📄</div>
+      <div class="label">Drag one or more files here, or click to choose<br><span style="font-size:11px;color:#9aa1bf;">PDF · DOCX · PPTX — pick from anywhere on your computer</span></div>
+      <div class="files" id="u-files">no file</div>
+      <input type="file" id="u-file" accept=".pdf,.docx,.pptx" multiple>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary" id="u-confirm" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Progress overlay -->
+<div class="progress-overlay" id="progress">
+  <div class="spinner"></div>
+  <div class="title" id="p-title">Ingestion in progress…</div>
+  <div class="step" id="p-step">Extracting PDF, LLM classification, RAG indexing. This may take 1–2 minutes depending on size.</div>
+</div>
+
+<!-- Toasts -->
+<div class="toasts" id="toasts"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ── Auth ──────────────────────────────────────────────────────────────
+// Course management is the primary workspace for all authenticated users.
+const token = localStorage.getItem('smart_teacher_token');
+const user  = JSON.parse(localStorage.getItem('smart_teacher_user') || '{}');
+if (!token) {
+  window.location.href = '/static/login.html';
+}
+$('user-email').textContent = `${user.first_name || user.email || 'user'} (${user.account_level || ''})`;
+const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+// ── State ─────────────────────────────────────────────────────────────
+// Pending (placeholder) domains and subjects exist only client-side until
+// a PDF is actually uploaded under them. The DB only knows real Course rows.
+let tree = [];                 // array of { domain, courses: [...] }
+let pendingDomains = new Set();// domain names with no subjects yet
+const pendingSubjectsByDomain = new Map();   // domain -> [{ title, language, level }]
+
+// UI state
+let openDomains  = new Set();   // domains expanded
+let openSubjects = new Set();   // subject ids expanded
+
+// ── Toasts ────────────────────────────────────────────────────────────
+function toast(msg, type = 'info', title = null) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.innerHTML = `<div class="t-title">${title || (type === 'error' ? 'Error' : type === 'success' ? '✅ Success' : 'Info')}</div><div class="t-msg">${msg}</div>`;
+  $('toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 300); }, 4500);
+}
+
+// ── Slug helper (mirror of backend logic, approximate) ─────────────────
+function slugify(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'untitled';
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────────
+function openModal(id, init = () => {}) {
+  $(id).classList.add('show');
+  init();
+  const first = $(id).querySelector('input[type=text]:not([disabled])');
+  if (first) setTimeout(() => first.focus(), 50);
+}
+function closeModal(id) { $(id).classList.remove('show'); }
+document.querySelectorAll('[data-close]').forEach(b =>
+  b.addEventListener('click', () => b.closest('.modal').classList.remove('show'))
+);
+document.querySelectorAll('.modal').forEach(m =>
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); })
+);
+
+// ── Data : load tree from API ────────────────────────────────────────
+async function loadTree() {
+  try {
+    const r = await fetch('/course/tree', { headers: authHeaders });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    tree = data.tree || [];
+    // Drop any pending domain/subject that now exists in the real tree
+    for (const node of tree) pendingDomains.delete(node.domain);
+    for (const node of tree) {
+      const realTitles = new Set(node.courses.map(c => c.title));
+      const pend = (pendingSubjectsByDomain.get(node.domain) || [])
+        .filter(p => !realTitles.has(p.title));
+      if (pend.length) pendingSubjectsByDomain.set(node.domain, pend);
+      else pendingSubjectsByDomain.delete(node.domain);
+    }
+    renderTree();
+  } catch (e) {
+    $('tree').innerHTML = `<div class="empty"><div class="ico">⚠️</div>Failed to load: ${e.message}</div>`;
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function renderTree() {
+  // Merge real tree + pending placeholders
+  const allDomains = new Map();      // domain -> { subjects: [...] }
+  for (const node of tree) {
+    allDomains.set(node.domain, { subjects: [...node.courses] });
+  }
+  for (const d of pendingDomains) {
+    if (!allDomains.has(d)) allDomains.set(d, { subjects: [] });
+  }
+  for (const [d, pend] of pendingSubjectsByDomain.entries()) {
+    if (!allDomains.has(d)) allDomains.set(d, { subjects: [] });
+    for (const p of pend) {
+      // Mark as pending with no id
+      allDomains.get(d).subjects.push({
+        id: null, title: p.title, subject: slugify(p.title),
+        language: p.language, level: p.level, chapters: [], _pending: true,
+      });
+    }
+  }
+
+  // Compute crumb
+  const nDomains = allDomains.size;
+  let nSubjects = 0, nCourses = 0;
+  for (const v of allDomains.values()) {
+    nSubjects += v.subjects.length;
+    for (const s of v.subjects) nCourses += (s.chapters || []).length;
+  }
+  $('crumb').textContent = `— ${nDomains} domain(s), ${nSubjects} subject(s), ${nCourses} course(s)`;
+
+  if (!allDomains.size) {
+    $('tree').innerHTML = `
+      <div class="empty">
+        <div class="ico">📂</div>
+        No domain yet.<br>
+        Click <strong>+ Add Domain</strong> to start.
+      </div>`;
+    return;
+  }
+
+  $('tree').innerHTML = '';
+  for (const [domain, info] of [...allDomains.entries()].sort()) {
+    $('tree').appendChild(renderDomain(domain, info.subjects));
+  }
+}
+
+function renderDomain(domain, subjects) {
+  const card = document.createElement('div');
+  card.className = 'domain-card' + (openDomains.has(domain) ? ' open' : '');
+
+  const totalCourses = subjects.reduce((s, c) => s + (c.chapters?.length || 0), 0);
+
+  card.innerHTML = `
+    <div class="domain-head">
+      <span class="chev">▶</span>
+      <span class="icon">📁</span>
+      <span class="title">${escapeHtml(domain)}</span>
+      <span class="count">${subjects.length} subject(s) · ${totalCourses} course(s)</span>
+    </div>
+    <div class="domain-body"></div>
+  `;
+
+  card.querySelector('.domain-head').addEventListener('click', () => {
+    if (card.classList.toggle('open')) openDomains.add(domain); else openDomains.delete(domain);
+  });
+
+  const body = card.querySelector('.domain-body');
+  for (const s of subjects) body.appendChild(renderSubject(domain, s));
+
+  // "Add subject" button
+  const addRow = document.createElement('div');
+  addRow.className = 'add-subject-row';
+  addRow.innerHTML = `<button class="btn small ghost">+ Add Subject in « ${escapeHtml(domain)} »</button>`;
+  addRow.querySelector('button').addEventListener('click', e => {
+    e.stopPropagation();
+    openAddSubject(domain);
+  });
+  body.appendChild(addRow);
+
+  return card;
+}
+
+function renderSubject(domain, c) {
+  const card = document.createElement('div');
+  card.className = 'subject-card' + (openSubjects.has(c.id) ? ' open' : '');
+
+  const meta = `${c.language?.toUpperCase() || '?'} · ${c.level || '?'} · ${(c.chapters || []).length} course(s)${c._pending ? ' · (pending)' : ''}`;
+  card.innerHTML = `
+    <div class="subject-head">
+      <span class="chev">▶</span>
+      <span class="ico">📚</span>
+      <span class="title">${escapeHtml(c.title)}</span>
+      <span class="meta">${meta}</span>
+      <div class="actions"></div>
+    </div>
+    <div class="subject-body"></div>
+  `;
+
+  card.querySelector('.subject-head').addEventListener('click', e => {
+    if (e.target.closest('.actions')) return;
+    if (card.classList.toggle('open')) openSubjects.add(c.id); else openSubjects.delete(c.id);
+  });
+
+  // Actions on the subject header : delete only. The ▶ Start button lives
+  // on each individual course row below so the user can start at any chapter.
+  const actions = card.querySelector('.actions');
+  if (!c._pending && c.id) {
+    const del = document.createElement('button');
+    del.className = 'btn small danger';
+    del.textContent = '🗑';
+    del.title = 'Delete this subject';
+    del.addEventListener('click', e => { e.stopPropagation(); confirmDeleteSubject(c); });
+    actions.appendChild(del);
+  }
+
+  // Body : courses (PDFs) list + upload row
+  const body = card.querySelector('.subject-body');
+  if (c.chapters && c.chapters.length) {
+    for (const ch of c.chapters) {
+      const row = document.createElement('div');
+      row.className = 'course-row';
+      row.innerHTML = `
+        <span class="ico">📄</span>
+        <span class="order">${ch.order}.</span>
+        <span class="title">${escapeHtml(ch.title)}</span>
+        <span class="secs">${ch.section_count} section(s)</span>
+      `;
+      // ▶ Start button — opens the course player at this specific chapter.
+      // Chapter.order in DB is 1-based ; index.html's chI is 0-based.
+      const start = document.createElement('button');
+      start.className = 'btn small primary';
+      start.style.marginLeft = '8px';
+      start.textContent = '▶ Start';
+      start.title = `Start presenting « ${ch.title} »`;
+      start.addEventListener('click', e => {
+        e.stopPropagation();
+        const params = new URLSearchParams({
+          course_id: c.id,
+          chapter:   String(Math.max(0, (Number(ch.order) || 1) - 1)),
+        });
+        window.open(`/static/index.html?${params.toString()}`, '_blank');
+      });
+      row.appendChild(start);
+      body.appendChild(row);
+    }
+  } else {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:#9aa1bf;font-size:12px;padding:6px 10px;font-style:italic;';
+    empty.textContent = c._pending
+      ? "Subject created locally — upload your first course to save it."
+      : 'No course yet. Upload your first PDF.';
+    body.appendChild(empty);
+  }
+
+  // Upload row (drag drop or click)
+  const drop = document.createElement('div');
+  drop.className = 'add-pdf-row';
+  drop.textContent = '➕  Upload course(s) into « ' + c.title + ' » — drop or click';
+  drop.addEventListener('click', () => openUpload(domain, c));
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    const files = [...e.dataTransfer.files].filter(f => /\.(pdf|docx|pptx)$/i.test(f.name));
+    if (!files.length) return toast('No valid file (.pdf/.docx/.pptx)', 'error');
+    uploadFiles(domain, c, files);
+  });
+  body.appendChild(drop);
+
+  return card;
+}
+
+function escapeHtml(s) {
+  return (s ?? '').toString().replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+// ── Add domain ────────────────────────────────────────────────────────
+$('add-domain-btn').addEventListener('click', () => openModal('modal-domain', () => $('d-name').value = ''));
+$('d-confirm').addEventListener('click', () => {
+  const name = $('d-name').value.trim();
+  if (!name) return toast('Name is required', 'error');
+  const slug = slugify(name);
+  if (tree.some(t => t.domain === slug) || pendingDomains.has(slug)) {
+    toast('This domain already exists', 'error');
+    return;
+  }
+  pendingDomains.add(slug);
+  openDomains.add(slug);
+  closeModal('modal-domain');
+  renderTree();
+  toast(`Domain « ${slug} » created. Add a subject to start.`, 'success');
+});
+
+// ── Add subject ───────────────────────────────────────────────────────
+let _addSubjectDomain = null;
+function openAddSubject(domain) {
+  _addSubjectDomain = domain;
+  openModal('modal-subject', () => {
+    $('s-domain').value = domain;
+    $('s-title').value = '';
+  });
+}
+$('s-confirm').addEventListener('click', () => {
+  const title = $('s-title').value.trim();
+  if (!title) return toast('Title is required', 'error');
+  const language = $('s-language').value;
+  const level = $('s-level').value;
+  const arr = pendingSubjectsByDomain.get(_addSubjectDomain) || [];
+  if (arr.some(p => slugify(p.title) === slugify(title))) {
+    toast('A subject with this name already exists', 'error');
+    return;
+  }
+  arr.push({ title, language, level });
+  pendingSubjectsByDomain.set(_addSubjectDomain, arr);
+  closeModal('modal-subject');
+  renderTree();
+  toast(`Subject « ${title} » created. Upload a course (PDF) to save it.`, 'success');
+});
+
+// ── Upload PDF ────────────────────────────────────────────────────────
+let _uploadCtx = null;     // { domain, subject }
+let _uploadFiles = [];
+
+function openUpload(domain, subject) {
+  _uploadCtx = { domain, subject };
+  _uploadFiles = [];
+  $('u-context').textContent = `Subject: ${subject.title} · Domain: ${domain}`;
+  $('u-files').textContent = 'no file';
+  $('u-confirm').disabled = true;
+  $('u-file').value = '';
+  openModal('modal-upload');
+}
+
+$('u-drop').addEventListener('click', () => $('u-file').click());
+$('u-file').addEventListener('change', e => setUploadFiles([...e.target.files]));
+$('u-drop').addEventListener('dragover', e => { e.preventDefault(); $('u-drop').classList.add('drag-over'); });
+$('u-drop').addEventListener('dragleave', () => $('u-drop').classList.remove('drag-over'));
+$('u-drop').addEventListener('drop', e => {
+  e.preventDefault();
+  $('u-drop').classList.remove('drag-over');
+  setUploadFiles([...e.dataTransfer.files]);
+});
+function setUploadFiles(files) {
+  _uploadFiles = files.filter(f => /\.(pdf|docx|pptx)$/i.test(f.name));
+  if (!_uploadFiles.length) { $('u-files').textContent = 'no valid file'; $('u-confirm').disabled = true; return; }
+  $('u-files').textContent = _uploadFiles.map(f => `📄 ${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(' · ');
+  $('u-confirm').disabled = false;
+}
+$('u-confirm').addEventListener('click', () => {
+  closeModal('modal-upload');
+  uploadFiles(_uploadCtx.domain, _uploadCtx.subject, _uploadFiles);
+});
+
+async function uploadFiles(domain, subject, files) {
+  $('progress').classList.add('show');
+  $('p-title').textContent = `Ingesting ${files.length} file(s)…`;
+  $('p-step').textContent = `${subject.title} · ${domain}`;
+  try {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    fd.append('language', subject.language || 'en');
+    fd.append('level', subject.level || 'high_school');
+    fd.append('auto_group', 'true');
+    if (subject.id) {
+      // Real subject → append explicit. The backend looks up the course's
+      // domain + subject from the existing Course row, so we don't need
+      // to send them again.
+      fd.append('append_to_course_id', subject.id);
+    } else {
+      // Pending subject → first PDF creates it. Send domain + title +
+      // explicit slug so the storage path is exact (no auto-detection).
+      fd.append('domain', slugify(domain));
+      fd.append('course_title', subject.title);
+      fd.append('course_slug', slugify(subject.title));
+    }
+
+    const res = await fetch('/course/build', {
+      method: 'POST',
+      headers: authHeaders,
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const ok = (data.results || []).filter(r => r.status === 'ok');
+    const errs = (data.results || []).filter(r => r.status !== 'ok');
+    if (ok.length) {
+      const created = ok.filter(r => r.db_action === 'created').length;
+      const appended = ok.filter(r => (r.db_action || '').startsWith('appended')).length;
+      toast(`${ok.length} file(s) ingested — ${created} created, ${appended} appended`, 'success');
+      // Open the subject we uploaded into
+      ok.forEach(r => { if (r.course_id) openSubjects.add(r.course_id); });
+    }
+    if (errs.length) toast(errs.map(e => e.file + ': ' + e.error).join(' · '), 'error');
+    await loadTree();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    $('progress').classList.remove('show');
+  }
+}
+
+// ── Delete subject ────────────────────────────────────────────────────
+async function confirmDeleteSubject(c) {
+  if (!confirm(`Delete subject « ${c.title} » and its ${c.chapters?.length || 0} course(s)?\nThis action is irreversible.`)) return;
+  try {
+    const res = await fetch(`/course/${c.id}`, { method: 'DELETE', headers: authHeaders });
+    if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+    toast(`Subject « ${c.title} » deleted`, 'success');
+    openSubjects.delete(c.id);
+    await loadTree();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ── Buttons ───────────────────────────────────────────────────────────
+$('refresh-btn').addEventListener('click', loadTree);
+$('logout-btn').addEventListener('click', async () => {
+  try { await fetch('/auth/logout', { method: 'POST', headers: authHeaders }); } catch {}
+  localStorage.clear();
+  window.location.href = '/static/login.html';
+});
+
+// ── Init ──────────────────────────────────────────────────────────────
+loadTree();
+</script>
+</body>
+</html>

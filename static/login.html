@@ -103,12 +103,8 @@ $('form').addEventListener('submit', async (e) => {
       student_id: data.student_id, email: data.email,
       account_level: data.account_level, first_name: data.first_name,
     }));
-    // Redirect by role
-    if (data.account_level === 'admin' || data.account_level === 'teacher') {
-      window.location.href = '/static/admin.html';
-    } else {
-      window.location.href = '/static/profile.html';
-    }
+    // All authenticated users land on the Course Manager.
+    window.location.href = '/static/courses.html';
   } catch (e) {
     $('err').textContent = 'Erreur réseau. Réessaie.';
   }
