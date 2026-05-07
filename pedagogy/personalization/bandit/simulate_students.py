@@ -326,7 +326,7 @@ class InconsistentLearner(_BaseStudent):
     MOOD_FLIP_PROB = 0.18
 
     BASE_CONFUSION_SHARP = 0.10
-    BASE_CONFUSION_TIRED = 0.35
+    BASE_CONFUSION_TIRED = 0.22
     MAX_CONFUSION = 0.65
 
     GAIN_MIN = 0.02
@@ -390,22 +390,36 @@ def _run_sanity() -> None:
     ordering on the mastery-gain column: SlowLearner lowest,
     FastLearner highest, DeepThinker in between, InconsistentLearner
     variable (depending on mood drift seeded by RNG).
+
+    The schedule rotates in a single off-best turn at positions 3 and 7
+    so the engagement metric reflects real behaviour rather than the
+    repetition-streak artifact of always picking the same strategy.
     """
     n_turns = 10
+    rotation_turns = {3, 7}
+    second_best = {
+        "FastLearner": "analogy",
+        "DeepThinker": "socratic",
+        "SlowLearner": "example",
+        "InconsistentLearner": "example",
+    }
+
     header = f"{'Archetype':<22} {'best arm':<26} {'avg conf':>9} {'avg dM':>8} {'engage':>8}"
     print(header)
     print("-" * len(header))
 
     for student in get_all_archetypes():
         best_arm = f"{student.BEST_STRATEGY}+{student.BEST_RATE}"
+        alt_strategy = second_best.get(student.name, student.BEST_STRATEGY)
         total_conf = 0
         total_dm = 0.0
         total_eng = 0
         mastery = 0.0
 
         for t in range(n_turns):
+            strategy = alt_strategy if t in rotation_turns else student.BEST_STRATEGY
             outcome = student.react(
-                strategy=student.BEST_STRATEGY,
+                strategy=strategy,
                 speech_rate=student.BEST_RATE,
                 current_mastery=mastery,
                 turn_number=t,
