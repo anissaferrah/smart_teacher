@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Questionnaire VARK</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif; background: #0b0d16; color: #fff;
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: #161928; border-radius: 12px; padding: 32px;
+    width: 100%; max-width: 640px; box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    border: 1px solid #2a2f4a;
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  .sub { color: #9aa1bf; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+
+  .progress-bar {
+    height: 6px; background: #0e1120; border-radius: 4px;
+    overflow: hidden; margin-bottom: 24px;
+  }
+  .progress-inner {
+    height: 100%; background: linear-gradient(90deg, #7c6dfa, #00e5b0);
+    transition: width .3s ease;
+  }
+  .progress-label { font-size: 12px; color: #9aa1bf; margin-bottom: 6px; }
+
+  .question { display: none; }
+  .question.active { display: block; }
+  .question h2 {
+    margin: 0 0 16px; font-size: 16px; color: #c4caea; line-height: 1.5;
+  }
+
+  .option {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px; margin-bottom: 8px;
+    background: #0e1120; border: 1px solid #2a2f4a; border-radius: 8px;
+    cursor: pointer; transition: all .15s ease;
+    user-select: none;
+  }
+  .option:hover { border-color: #7c6dfa; }
+  .option.selected {
+    border-color: #7c6dfa; background: rgba(124, 109, 250, 0.1);
+  }
+  .option input { display: none; }
+  .option .checkmark {
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 2px solid #2a2f4a; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+    font-size: 11px; color: #fff;
+  }
+  .option.selected .checkmark {
+    background: #7c6dfa; border-color: #7c6dfa;
+  }
+  .option .checkmark::before { content: ''; }
+  .option.selected .checkmark::before { content: '✓'; }
+  .option .text { flex: 1; font-size: 14px; line-height: 1.4; color: #e0e4f5; }
+
+  .nav-row {
+    display: flex; justify-content: space-between; gap: 12px; margin-top: 24px;
+  }
+  button {
+    padding: 10px 18px; border: none; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  button.primary {
+    background: linear-gradient(135deg, #7c6dfa, #00e5b0); color: #fff;
+  }
+  button.primary:hover { opacity: .9; }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary {
+    background: #2a2f4a; color: #c4caea;
+  }
+  button.secondary:hover { background: #3a3f5a; }
+  button.secondary:disabled { opacity: .4; cursor: not-allowed; }
+
+  .hint {
+    font-size: 12px; color: #9aa1bf; margin-top: 12px; text-align: center;
+  }
+  .err { color: #ff7a8a; font-size: 13px; margin-top: 12px; min-height: 18px; }
+
+  /* Result screen */
+  .result { display: none; text-align: center; }
+  .result.active { display: block; }
+  .result h2 { font-size: 20px; margin: 0 0 8px; }
+  .result .dom-badge {
+    display: inline-block; padding: 6px 16px; border-radius: 14px;
+    font-size: 14px; font-weight: 600; margin: 12px 0;
+  }
+  .dom-visual { background: #2a4a3a; color: #6ee5b0; }
+  .dom-auditory { background: #4a4a2a; color: #ffe588; }
+  .dom-kinesthetic { background: #4a2a4a; color: #ff88e5; }
+  .dom-reading { background: #2a3a5a; color: #88c4ff; }
+  .dom-mixed { background: #2a2f4a; color: #9aa1bf; }
+  .scores-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    margin: 20px 0; text-align: left;
+  }
+  .score-tile {
+    background: #0e1120; border-radius: 8px; padding: 12px;
+    border: 1px solid #2a2f4a;
+  }
+  .score-tile .lbl { font-size: 12px; color: #9aa1bf; }
+  .score-tile .val { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .visual-color    { color: #6ee5b0; }
+  .auditory-color  { color: #ffe588; }
+  .kinesthetic-color { color: #ff88e5; }
+  .reading-color   { color: #88c4ff; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <!-- Quiz screen -->
+  <div id="quiz-screen">
+    <h1>🧠 Quel est ton style d'apprentissage ?</h1>
+    <div class="sub">
+      8 questions courtes basées sur le modèle <strong>VARK</strong> de Fleming &amp; Mills (1992).
+      Tu peux cocher <strong>plusieurs réponses</strong> par question si plusieurs te ressemblent.
+    </div>
+
+    <div class="progress-label" id="progress-label">Question 1 / 8</div>
+    <div class="progress-bar"><div class="progress-inner" id="progress-inner" style="width: 12.5%"></div></div>
+
+    <div id="questions-container">
+      <div class="empty" style="text-align:center; padding: 30px; color: #9aa1bf;">Chargement…</div>
+    </div>
+
+    <div class="nav-row" id="nav-row" style="display:none;">
+      <button class="secondary" id="prev-btn">← Précédent</button>
+      <button class="primary" id="next-btn">Suivant →</button>
+    </div>
+
+    <div class="err" id="err"></div>
+    <div class="hint">Tes réponses configurent le <em>prior</em> bayésien — Smart Teacher s'affinera ensuite avec tes interactions réelles.</div>
+  </div>
+
+  <!-- Result screen -->
+  <div id="result-screen" class="result">
+    <h1>✅ Merci !</h1>
+    <div class="sub">Voici ton profil de départ — il évoluera avec ton usage de Smart Teacher.</div>
+
+    <div>
+      <span style="color: #9aa1bf; font-size: 13px;">Style dominant :</span>
+      <div class="dom-badge" id="result-dominant">–</div>
+    </div>
+
+    <div class="scores-grid" id="scores-grid"></div>
+
+    <div class="hint" style="margin-bottom: 16px;">
+      Le narrator va commencer à adapter sa voix et ses explications à ton style.
+      Plus tu interagis, plus la précision augmente.
+    </div>
+
+    <div class="nav-row">
+      <button class="secondary" onclick="window.location.href='/static/profile.html'">Voir mon profil →</button>
+      <button class="primary" onclick="window.location.href='/static/index.html'">Commencer un cours 🚀</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const token = localStorage.getItem('smart_teacher_token');
+if (!token) { window.location.href = '/static/login.html'; }
+const userBrief = JSON.parse(localStorage.getItem('smart_teacher_user') || '{}');
+const lang = (userBrief.preferred_language || 'fr').slice(0, 2);
+
+let questions = [];
+let responses = {};         // { q_id: Set<style> }
+let currentIdx = 0;
+
+const STYLE_LABELS = {
+  visual:      '🖼️ Visuel',
+  auditory:    '🎧 Auditif',
+  reading:     '📖 Lecture',
+  kinesthetic: '✋ Kinesthésique',
+};
+
+async function loadQuestions() {
+  try {
+    const res = await fetch(`/vark/questionnaire?lang=${lang}`);
+    const data = await res.json();
+    questions = data.questions || [];
+    questions.forEach(q => responses[q.id] = new Set());
+    renderQuestion();
+    $('nav-row').style.display = 'flex';
+  } catch (e) {
+    $('questions-container').innerHTML = `<div style="color:#ff7a8a; padding: 20px;">Erreur de chargement : ${e.message}</div>`;
+  }
+}
+
+function renderQuestion() {
+  const q = questions[currentIdx];
+  if (!q) return;
+  const total = questions.length;
+  $('progress-label').textContent = `Question ${currentIdx + 1} / ${total}`;
+  $('progress-inner').style.width = `${((currentIdx + 1) / total) * 100}%`;
+
+  const selected = responses[q.id];
+  $('questions-container').innerHTML = `
+    <div class="question active" id="q-${q.id}">
+      <h2>${escapeHtml(q.text)}</h2>
+      ${q.options.map(opt => `
+        <label class="option ${selected.has(opt.style) ? 'selected' : ''}" data-style="${opt.style}">
+          <input type="checkbox" ${selected.has(opt.style) ? 'checked' : ''}>
+          <span class="checkmark"></span>
+          <span class="text">${escapeHtml(opt.text)}</span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+
+  // Attach option click handlers
+  document.querySelectorAll('.option').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const style = el.dataset.style;
+      if (selected.has(style)) selected.delete(style);
+      else selected.add(style);
+      el.classList.toggle('selected');
+    });
+  });
+
+  // Update nav buttons
+  $('prev-btn').disabled = (currentIdx === 0);
+  $('next-btn').textContent = (currentIdx === total - 1) ? 'Terminer ✓' : 'Suivant →';
+  $('err').textContent = '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+$('prev-btn').addEventListener('click', () => {
+  if (currentIdx > 0) { currentIdx--; renderQuestion(); }
+});
+
+$('next-btn').addEventListener('click', async () => {
+  const q = questions[currentIdx];
+  if (!q) return;
+  if (responses[q.id].size === 0) {
+    $('err').textContent = 'Choisis au moins une option (ou plusieurs).';
+    return;
+  }
+  if (currentIdx < questions.length - 1) {
+    currentIdx++;
+    renderQuestion();
+  } else {
+    await submitAll();
+  }
+});
+
+async function submitAll() {
+  // Convert Sets → arrays for JSON serialization
+  const payload = {};
+  for (const [qid, set] of Object.entries(responses)) {
+    payload[qid] = Array.from(set);
+  }
+  $('next-btn').disabled = true;
+  $('next-btn').textContent = 'Envoi…';
+  try {
+    const res = await fetch('/student/me/vark/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) { window.location.href = '/static/login.html'; return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      $('err').textContent = err.detail || `Erreur ${res.status}`;
+      $('next-btn').disabled = false;
+      $('next-btn').textContent = 'Terminer ✓';
+      return;
+    }
+    const data = await res.json();
+    showResult(data);
+  } catch (e) {
+    $('err').textContent = 'Erreur réseau. Réessaie.';
+    $('next-btn').disabled = false;
+    $('next-btn').textContent = 'Terminer ✓';
+  }
+}
+
+function showResult(data) {
+  $('quiz-screen').style.display = 'none';
+  $('result-screen').classList.add('active');
+
+  const dominant = data.dominant || 'mixed';
+  const badge = $('result-dominant');
+  badge.textContent = STYLE_LABELS[dominant] || dominant;
+  badge.className = 'dom-badge dom-' + dominant;
+
+  const counts = data.vark_counts || {};
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+  $('scores-grid').innerHTML = ['visual', 'auditory', 'reading', 'kinesthetic'].map(s => {
+    const n = counts[s] || 0;
+    const pct = ((n / total) * 100).toFixed(0);
+    return `
+      <div class="score-tile">
+        <div class="lbl">${STYLE_LABELS[s]}</div>
+        <div class="val ${s}-color">${n} / ${total} <span style="font-size:13px; color:#9aa1bf">(${pct}%)</span></div>
+      </div>
+    `;
+  }).join('');
+}
+
+loadQuestions();
+</script>
+
+</body>
+</html>

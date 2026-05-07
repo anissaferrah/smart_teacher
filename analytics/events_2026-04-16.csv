@@ -1,0 +1,2 @@
+event_time,session_id,student_id,course_id,language,level,event_type,question,answer_length,stt_time,llm_time,tts_time,total_time,kpi_ok,subject,chapter_idx,section_idx,confidence,interruptions
+2026-04-16T18:39:40.180049,dad7f862-26d0-44be-8428-6425878e1f2c,,,fr,lycée,qa,est que tu peut expliquer ce qoui ce cours,1379,0,101.271,6.369,107.64,False,,0,0,0.0,0

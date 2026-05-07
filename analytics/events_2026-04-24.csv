@@ -1,0 +1,6 @@
+event_time,session_id,student_id,course_id,language,level,event_type,question,answer_length,stt_time,llm_time,tts_time,total_time,kpi_ok,subject,chapter_idx,section_idx,confidence,interruptions
+2026-04-24T09:46:01.965089,f3ef7596-f3f5-4e34-9208-e74aa1198ea6,,f1d8b7fd-e1d2-411d-a714-6b190cfa7a0d,en,lycée,section_start,,0,0.0,0.0,0.0,0.0,False,,0,0,0.0,0
+2026-04-24T09:55:01.983436,f3ef7596-f3f5-4e34-9208-e74aa1198ea6,,f1d8b7fd-e1d2-411d-a714-6b190cfa7a0d,fr,lycée,section_start,,0,0.0,0.0,0.0,0.0,False,,0,1,0.0,0
+2026-04-24T09:56:59.640896,f3ef7596-f3f5-4e34-9208-e74aa1198ea6,,f1d8b7fd-e1d2-411d-a714-6b190cfa7a0d,fr,lycée,section_start,,0,0.0,0.0,0.0,0.0,False,,0,2,0.0,0
+2026-04-24T10:20:57.487362,d0cb32cc-5d53-40a3-a0d6-dc9c5c148615,,f1d8b7fd-e1d2-411d-a714-6b190cfa7a0d,en,lycée,section_start,,0,0.0,0.0,0.0,0.0,False,,0,0,0.0,0
+2026-04-24T10:31:25.985986,d0cb32cc-5d53-40a3-a0d6-dc9c5c148615,,f1d8b7fd-e1d2-411d-a714-6b190cfa7a0d,fr,lycée,section_start,,0,0.0,0.0,0.0,0.0,False,,0,1,0.0,0

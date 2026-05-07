@@ -1,0 +1,63 @@
+# ── Python venvs ──
+envProject/
+.venv/
+venv/
+
+# ── Caches ──
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Git / VCS ──
+.git/
+.gitignore
+.gitattributes
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+
+# ── Runtime files (générés à la volée) ──
+logs/
+analytics/*.csv
+data/rag_cache/
+data/multimodal_db/
+media/turns/
+media/audio/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Smoke tests / dev scripts (à racine) ──
+_smoke_*.py
+_test_*.py
+_update_*.py
+
+# ── Notebooks / docs ──
+*.ipynb
+*.md
+README.md
+!requirements.txt
+
+# ── Node ──
+node_modules/
+package-lock.json
+
+# ── Docker artifacts ──
+Dockerfile.local
+docker-compose.override.yml
+
+# ── Sensitive files (NE PAS embarquer dans l'image) ──
+.env
+.env.local
+.env.*.local
+
+# ⚠️ KEEP IN IMAGE (needed for SIGHT to work in production):
+#    - dataset/sight-main/data/processed/*.pth
+#    - courses/   (ton corpus)

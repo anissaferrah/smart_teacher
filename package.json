@@ -1,0 +1,21 @@
+{ "type": "module",
+  "name": "smart_teacher",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.1.0",
+    "@elevenlabs/node-sdk": "^1.0.0",
+    "@google-cloud/text-to-speech": "^3.0.0",
+    "@openai/openai": "^3.0.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "dotenv": "^10.0.0",
+    "express": "^4.17.1"
+  }
+}

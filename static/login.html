@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Connexion</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0b0d16; color: #fff; min-height: 100vh; margin: 0; display: flex; align-items: center; justify-content: center; }
+  .card { background: #161928; border-radius: 12px; padding: 32px; min-width: 360px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  h1 { margin: 0 0 8px; font-size: 24px; }
+  .sub { color: #9aa1bf; font-size: 14px; margin-bottom: 24px; }
+  .field { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: #c4caea; margin-bottom: 6px; }
+  input { width: 100%; box-sizing: border-box; padding: 10px 12px; background: #0e1120; border: 1px solid #2a2f4a; border-radius: 6px; color: #fff; font-size: 14px; }
+  button { width: 100%; padding: 12px; background: linear-gradient(135deg,#7c6dfa,#00e5b0); border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button:hover { opacity: .9; }
+  .switch { text-align: center; margin-top: 16px; font-size: 13px; color: #9aa1bf; }
+  .switch a { color: #7c6dfa; cursor: pointer; }
+  .err { color: #ff7a8a; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .row { display: flex; gap: 8px; }
+  .row > .field { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1 id="title">Smart Teacher</h1>
+  <div class="sub" id="subtitle">Connexion à ton compte</div>
+
+  <form id="form">
+    <div class="field" id="name-fields" style="display:none">
+      <div class="row">
+        <div class="field"><label>Prénom</label><input id="first_name" autocomplete="given-name"/></div>
+        <div class="field"><label>Nom</label><input id="last_name" autocomplete="family-name"/></div>
+      </div>
+    </div>
+    <div class="field"><label>Email</label><input id="email" type="email" required autocomplete="email"/></div>
+    <div class="field"><label>Mot de passe</label><input id="password" type="password" required autocomplete="current-password" minlength="6"/></div>
+    <button type="submit" id="submit-btn">Se connecter</button>
+    <div class="err" id="err"></div>
+  </form>
+
+  <div class="switch">
+    <span id="switch-label">Pas encore de compte ?</span>
+    <a id="switch-link">Créer un compte</a>
+  </div>
+</div>
+
+<script>
+let mode = 'login'; // 'login' | 'register'
+
+const $ = (id) => document.getElementById(id);
+
+function setMode(m) {
+  mode = m;
+  $('title').textContent = (m === 'login') ? 'Connexion' : 'Créer un compte';
+  $('subtitle').textContent = (m === 'login') ? 'Connexion à ton compte' : 'Crée ton compte étudiant';
+  $('submit-btn').textContent = (m === 'login') ? 'Se connecter' : 'Créer le compte';
+  $('switch-label').textContent = (m === 'login') ? 'Pas encore de compte ?' : 'Déjà inscrit ?';
+  $('switch-link').textContent = (m === 'login') ? 'Créer un compte' : 'Se connecter';
+  $('name-fields').style.display = (m === 'register') ? 'block' : 'none';
+  $('err').textContent = '';
+}
+
+$('switch-link').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('err').textContent = '';
+  const email = $('email').value.trim().toLowerCase();
+  const password = $('password').value;
+  const path = (mode === 'login') ? '/auth/login' : '/auth/register';
+  const body = (mode === 'login')
+    ? { email, password }
+    : {
+        email, password,
+        first_name: $('first_name').value || 'Étudiant',
+        last_name: $('last_name').value || '',
+      };
+
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      $('err').textContent = err.detail || `Erreur ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    localStorage.setItem('smart_teacher_token', data.access_token);
+    localStorage.setItem('smart_teacher_user', JSON.stringify({
+      student_id: data.student_id, email: data.email,
+      account_level: data.account_level, first_name: data.first_name,
+    }));
+    // Redirect by role
+    if (data.account_level === 'admin' || data.account_level === 'teacher') {
+      window.location.href = '/static/admin.html';
+    } else {
+      window.location.href = '/static/profile.html';
+    }
+  } catch (e) {
+    $('err').textContent = 'Erreur réseau. Réessaie.';
+  }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+﻿# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  Smart Teacher â€” Python dependencies
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  Install:  pip install -r requirements.txt
+#  Python:   3.10+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+# â”€â”€ Core API / web server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+requests
+httpx
+websockets
+
+# â”€â”€ Auth / security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+bcrypt
+PyJWT
+
+# â”€â”€ Validation / data models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+pydantic
+
+# â”€â”€ Database / storage / cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+sqlalchemy
+asyncpg
+redis
+minio
+clickhouse-connect
+
+# â”€â”€ Numerical / data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+numpy
+pandas
+scipy
+sympy
+# matplotlib : used by analyze_metrics.py for the offline KPI dashboard
+# (response-time distributions, component timing breakdown, RTF trends).
+# Not required at server runtime â€” only to render the dashboard PNG.
+matplotlib
+
+# â”€â”€ ML / NLP / Embeddings / RAG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+openai
+torch
+transformers
+sentence-transformers
+qdrant-client
+elasticsearch
+langchain-core
+langchain-openai
+langchain-community
+langchain-huggingface
+langchain-qdrant
+langgraph
+langdetect
+# lingua : detection FR/EN robuste sur textes courts (<10 mots).
+# langdetect classifie "can you give us more examples" comme FR 10/10 ;
+# lingua est correct (statistique n-gram + ordre des mots).
+lingua-language-detector
+unstructured
+faster-whisper
+
+# â”€â”€ Audio / speech / TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+soundfile
+sounddevice
+librosa
+pydub
+edge-tts
+elevenlabs
+whisperlivekit
+
+# â”€â”€ Documents / PDF / OCR / images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+python-pptx
+pypdf
+# pymupdf : utilise pour extraire les bbox des images PDF (Fix #5).
+# Permet le retrieval spatial (re-cropper une figure pour un concept).
+# Fallback pypdf transparent si pymupdf indisponible.
+pymupdf
+pdfminer.six
+pdfplumber
+python-docx
+pytesseract
+pdf2image
+Pillow
+beautifulsoup4
+# Math OCR (optional â€” opt-in via ENABLE_MATH_OCR=true).
+# Pulls a ~500 MB model on first run; only activates when Tesseract
+# returns garbage on a formula-shaped image. Skip this line if disk
+# space is tight; the rest of the OCR pipeline still works.
+pix2tex
+
+# â”€â”€ Observability / tracing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# OpenTelemetry tracing pour les graphes agentic (agentic/observability.py).
+# Activation auto si ces 2 libs sont presentes ; sinon le code marche sans
+# tracing. Note: opentelemetry-instrumentation-fastapi a ete retire (jamais
+# importe dans le code, declare orphelin).
+opentelemetry-api
+opentelemetry-sdk
+
+# â”€â”€ Spaced-repetition (learning scheduler) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+fsrs
+
+# â”€â”€ Tests / Dev tooling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Requis pour `pytest tests/` et l'eval framework (rag/evaluation/).
+# Marquer "test" si vous voulez les separer dans un requirements-dev.txt.
+pytest
+pytest-asyncio
+pytest-cov
+
+# â”€â”€ Scripts E2E / debug DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# scripts/e2e_ingestion_test.py + outils de truncate/inspect Postgres
+# (la prod utilise asyncpg via SQLAlchemy ; psycopg2 sert au sync direct).
+psycopg2-binary
+
+# â”€â”€ Transitifs explicites (utiles a documenter) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ces libs sont auto-installees par d'autres deps, mais on les liste pour
+# clarte de ce qui tourne en runtime :
+#   - aiohttp : client HTTP async (utilise par langgraph + outils internes)
+#   - onnxruntime : YOLOX layout detection via unstructured hi_res
+#   - pikepdf : extension pypdf pour formats PDF complexes
+aiohttp
+onnxruntime
+pikepdf
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  External services (NOT pip-installable â€” must be running separately)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  - PostgreSQL 15+      : main database (docker-compose up -d postgres)
+#  - Redis 7+            : session cache + pub/sub
+#  - Qdrant              : vector database (RAG embeddings)
+#  - Elasticsearch 8+    : full-text search
+#  - MinIO (optional)    : S3-compatible object storage (uses local fs by default)
+#  - ClickHouse          : analytics DB
+#  - Ollama              : local LLM fallback (text=mistral, vision=llava:7b)
+#  - Tesseract OCR       : install tesseract-ocr binary on host
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

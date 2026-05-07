@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Smart Teacher — Admin Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #0b0d16; color: #fff; margin: 0; }
+  header { background: #161928; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2f4a; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .meta { font-size: 13px; color: #9aa1bf; }
+  header button { background: #2a2f4a; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .controls { display: flex; gap: 12px; margin-bottom: 16px; }
+  .controls input { flex: 1; padding: 10px 12px; background: #161928; border: 1px solid #2a2f4a; border-radius: 6px; color: #fff; font-size: 14px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat { background: #161928; padding: 16px; border-radius: 8px; }
+  .stat .num { font-size: 26px; font-weight: 700; color: #7c6dfa; }
+  .stat .label { color: #9aa1bf; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  table { width: 100%; border-collapse: collapse; background: #161928; border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #2a2f4a; font-size: 13px; }
+  th { background: #1c2138; color: #c4caea; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  tr:hover td { background: #1a1d33; cursor: pointer; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.student   { background: #1f3a5a; color: #6ec1ff; }
+  .badge.teacher   { background: #4a3a6a; color: #c08fff; }
+  .badge.admin     { background: #5a3a3a; color: #ff8888; }
+  .badge.visual    { background: #2a4a3a; color: #6ee5b0; }
+  .badge.auditory  { background: #4a4a2a; color: #ffe588; }
+  .badge.kinesthetic { background: #4a2a4a; color: #ff88e5; }
+  .badge.reading   { background: #2a3a5a; color: #88c4ff; }
+  .badge.mixed, .badge.unknown { background: #2a2f4a; color: #9aa1bf; }
+  .pace-fast   { color: #ff8a8a; }
+  .pace-slow   { color: #88e5b0; }
+  .pace-normal { color: #c4caea; }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); align-items: center; justify-content: center; z-index: 100; }
+  .modal.show { display: flex; }
+  .modal-card { background: #0e1120; max-width: 900px; width: 90%; max-height: 85vh; overflow-y: auto; border-radius: 12px; padding: 24px; border: 1px solid #2a2f4a; }
+  .modal-card h2 { margin: 0 0 8px; }
+  .modal-section { margin-top: 18px; padding-top: 18px; border-top: 1px solid #2a2f4a; }
+  .modal-section h3 { margin: 0 0 10px; font-size: 14px; color: #c4caea; text-transform: uppercase; }
+  .ev-list { font-size: 13px; }
+  .ev { padding: 6px 0; border-bottom: 1px dashed #2a2f4a; display: flex; gap: 12px; }
+  .ev .when { color: #6ec1ff; min-width: 130px; font-size: 11px; }
+  .ev .what { flex: 1; }
+  .close-btn { position: absolute; top: 16px; right: 16px; background: #2a2f4a; color: #fff; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 Smart Teacher — Admin Dashboard</h1>
+  <div>
+    <span class="meta" id="user-email">…</span>
+    &nbsp;·&nbsp;
+    <button id="logout-btn">Déconnexion</button>
+  </div>
+</header>
+
+<main>
+  <div class="stats-row">
+    <div class="stat"><div class="num" id="total-students">–</div><div class="label">Étudiants total</div></div>
+    <div class="stat"><div class="num" id="active-students">–</div><div class="label">Actifs (7j)</div></div>
+    <div class="stat"><div class="num" id="total-interactions">–</div><div class="label">Interactions cumulées</div></div>
+    <div class="stat"><div class="num" id="total-mastered">–</div><div class="label">Concepts maîtrisés</div></div>
+  </div>
+
+  <div class="controls">
+    <input id="search" placeholder="🔎 Rechercher par email, prénom, nom…" />
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Étudiant</th><th>Email</th><th>Rôle</th><th>Style</th><th>Pace</th>
+        <th>Sessions</th><th>Interactions</th><th>Maîtrise moy.</th><th>XP</th><th>Streak</th>
+      </tr>
+    </thead>
+    <tbody id="rows"><tr><td colspan="10" style="text-align:center; color:#6ec1ff">Chargement…</td></tr></tbody>
+  </table>
+</main>
+
+<!-- Modal détail étudiant -->
+<div class="modal" id="modal">
+  <div class="modal-card" style="position:relative">
+    <button class="close-btn" id="close-modal">×</button>
+    <div id="modal-content">…</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+const token = localStorage.getItem('smart_teacher_token');
+const user  = JSON.parse(localStorage.getItem('smart_teacher_user') || '{}');
+
+if (!token || (user.account_level !== 'admin' && user.account_level !== 'teacher')) {
+  window.location.href = '/static/login.html';
+}
+$('user-email').textContent = `${user.first_name} (${user.email}) · ${user.account_level}`;
+
+const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+async function loadStudents(search = '') {
+  try {
+    const url = `/admin/students?limit=200${search ? '&search=' + encodeURIComponent(search) : ''}`;
+    const res = await fetch(url, { headers: authHeaders });
+    if (res.status === 401) { window.location.href = '/static/login.html'; return; }
+    const data = await res.json();
+    renderStudents(data);
+    updateStats(data);
+  } catch (e) {
+    $('rows').innerHTML = `<tr><td colspan="10" style="color:#ff7a8a">Erreur: ${e.message}</td></tr>`;
+  }
+}
+
+function updateStats(data) {
+  $('total-students').textContent = data.total;
+  let active = 0, totalInt = 0, totalMastered = 0;
+  for (const s of data.items) {
+    if (s.stats.sessions > 0) active++;
+    totalInt += s.stats.interactions;
+    totalMastered += s.stats.concepts_mastered;
+  }
+  $('active-students').textContent = active;
+  $('total-interactions').textContent = totalInt;
+  $('total-mastered').textContent = totalMastered;
+}
+
+function renderStudents(data) {
+  if (data.items.length === 0) {
+    $('rows').innerHTML = `<tr><td colspan="10" style="text-align:center; color:#9aa1bf">Aucun étudiant.</td></tr>`;
+    return;
+  }
+  $('rows').innerHTML = data.items.map(s => {
+    const style = s.profile_brief?.learning_style || 'unknown';
+    const pace = s.profile_brief?.pace || 'normal';
+    return `
+    <tr data-id="${s.student_id}">
+      <td><strong>${s.name || '–'}</strong></td>
+      <td>${s.email}</td>
+      <td><span class="badge ${s.account_level}">${s.account_level}</span></td>
+      <td><span class="badge ${style}">${style}</span></td>
+      <td class="pace-${pace}">${pace}</td>
+      <td>${s.stats.sessions}</td>
+      <td>${s.stats.interactions}</td>
+      <td>${(s.stats.avg_mastery * 100).toFixed(0)}%</td>
+      <td>${s.profile_brief?.total_xp ?? 0}</td>
+      <td>${s.profile_brief?.streak_days ?? 0}🔥</td>
+    </tr>`;
+  }).join('');
+  for (const tr of document.querySelectorAll('tr[data-id]')) {
+    tr.addEventListener('click', () => openStudent(tr.dataset.id));
+  }
+}
+
+async function openStudent(id) {
+  $('modal').classList.add('show');
+  $('modal-content').innerHTML = `<h2>Chargement…</h2>`;
+  try {
+    const res = await fetch(`/admin/students/${id}/full`, { headers: authHeaders });
+    const data = await res.json();
+    renderStudentDetail(data);
+  } catch (e) {
+    $('modal-content').innerHTML = `<h2>Erreur</h2><p>${e.message}</p>`;
+  }
+}
+
+function renderStudentDetail(data) {
+  const p = data.profile;
+  const t = data.timeline;
+  const recent = t.events_recent.slice(0, 20);
+  $('modal-content').innerHTML = `
+    <h2>${p.name}</h2>
+    <div style="color:#9aa1bf; font-size:13px">${p.profile?.learning_style ?? '?'} · pace=${p.profile?.pace ?? '?'} · level=${p.profile?.preferred_difficulty ?? '?'}</div>
+
+    <div class="modal-section">
+      <h3>📊 Statistiques globales</h3>
+      <div class="stats-row">
+        <div class="stat"><div class="num">${p.stats.concepts_mastered}</div><div class="label">Maîtrisés</div></div>
+        <div class="stat"><div class="num">${p.stats.concepts_in_progress}</div><div class="label">En cours</div></div>
+        <div class="stat"><div class="num">${(p.stats.avg_mastery_score * 100).toFixed(0)}%</div><div class="label">Maîtrise moy.</div></div>
+        <div class="stat"><div class="num">${p.stats.session_count}</div><div class="label">Sessions</div></div>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>🎮 Gamification</h3>
+      <div>XP: <strong>${p.gamification.total_xp}</strong> · Niveau ${p.gamification.level} · Streak ${p.gamification.streak_days} 🔥</div>
+    </div>
+
+    <div class="modal-section">
+      <h3>🧠 Mastery par concept (top 10)</h3>
+      <ol style="font-size:13px; padding-left: 20px">
+        ${t.mastery.slice(0, 10).map(m =>
+          `<li>${m.concept} — <strong>${(m.score*100).toFixed(0)}%</strong> (${m.attempts} tentatives, ${m.confusions} confusions)</li>`
+        ).join('') || '<li style="color:#9aa1bf">aucun</li>'}
+      </ol>
+    </div>
+
+    <div class="modal-section">
+      <h3>⚡ Activité récente (${t.summary.events} events sur ${t.window_days}j)</h3>
+      <div class="ev-list">
+        ${recent.map(e => `
+          <div class="ev">
+            <span class="when">${(e.created_at || '').slice(0,16).replace('T',' ')}</span>
+            <span class="what"><strong>${e.event_type}</strong> ${e.concept ? '· ' + e.concept : ''} ${e.confusion_score > 0 ? '<span style="color:#ff8a8a"> [confusion]</span>' : ''}</span>
+          </div>
+        `).join('') || '<div style="color:#9aa1bf">aucune activité</div>'}
+      </div>
+    </div>
+  `;
+}
+
+$('close-modal').addEventListener('click', () => $('modal').classList.remove('show'));
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').classList.remove('show'); });
+
+let searchTimer = null;
+$('search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadStudents($('search').value.trim()), 300);
+});
+
+$('logout-btn').addEventListener('click', async () => {
+  await fetch('/auth/logout', { method: 'POST', headers: authHeaders });
+  localStorage.clear();
+  window.location.href = '/static/login.html';
+});
+
+loadStudents();
+</script>
+
+</body>
+</html>

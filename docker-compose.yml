@@ -1,0 +1,200 @@
+# Smart Teacher — Docker Compose Complet
+# Démarrage minimal : docker-compose up -d
+# Démarrage complet : docker-compose --profile full up -d
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart_teacher_postgres
+    environment:
+      POSTGRES_DB:       smart_teacher
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d smart_teacher"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smart_teacher
+
+  redis:
+    image: redis:7-alpine
+    container_name: smart_teacher_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smart_teacher
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: smart_teacher_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smart_teacher
+
+  # MinIO - Stockage medias (activer avec --profile full)
+  minio:
+    image: minio/minio:latest
+    container_name: smart_teacher_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    profiles:
+      - full
+    networks:
+      - smart_teacher
+
+  # Elasticsearch - Recherche historique (activer avec --profile full)
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    container_name: smart_teacher_es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    profiles:
+      - full
+    networks:
+      - smart_teacher
+
+  # ClickHouse - Analytics (activer avec --profile full)
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: smart_teacher_clickhouse
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB:       smart_teacher
+      CLICKHOUSE_USER:     default
+      CLICKHOUSE_PASSWORD: smart_teacher
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    profiles:
+      - full
+    networks:
+      - smart_teacher
+
+  # Ollama - Local LLM (Mistral) - PROFESSIONNEL ⭐
+  ollama:
+    image: ollama/ollama:latest
+    container_name: smart_teacher_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - smart_teacher
+    restart: unless-stopped
+
+  # ── Smart Teacher app (FastAPI + LangGraph + SIGHT) ──
+  app:
+    build: .
+    container_name: smart_teacher_app
+    profiles: ["app", "full"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env  # OPENAI_API_KEY, GEMINI_API_KEY, etc.
+    environment:
+      # Override hosts so the app finds the dockerized infra by service name
+      # (these take precedence over .env values for these specific keys)
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      QDRANT_HOST: qdrant
+      OLLAMA_HOST: ollama
+      # SIGHT auto-active si suffisamment de RAM allouée (cf mem_limit ci-dessous)
+    volumes:
+      # Persist generated media + logs across container restarts
+      - ./logs:/app/logs
+      - ./media:/app/media
+      - ./data/rag_cache:/app/data/rag_cache
+      - ./data/multimodal_db:/app/data/multimodal_db
+      - ./courses:/app/courses
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          # 4 GB suffit pour: Whisper base + xlm-roberta SIGHT + FastAPI + RAG
+          memory: 4G
+    networks:
+      - smart_teacher
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  minio_data:
+  es_data:
+  clickhouse_data:
+  ollama_models:
+
+networks:
+  smart_teacher:
+    driver: bridge
