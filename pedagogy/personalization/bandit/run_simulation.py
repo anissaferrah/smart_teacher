@@ -115,12 +115,19 @@ def _converged_arm(bandit: ContextualThompsonBandit, learning_style: str) -> str
 
 
 def run_simulation() -> tuple[list[dict], list[dict]]:
-    """Run the full simulation and return (records, per-archetype summary)."""
-    bandit = ContextualThompsonBandit(rng_seed=BANDIT_SEED)
+    """Run the full simulation and return (records, per-archetype summary).
+
+    Each archetype gets its OWN bandit so that the RNG cascade from one
+    archetype's exploration trajectory doesn't perturb the next. With a
+    single shared bandit, changing one archetype's reward distribution
+    shifts the random draws hitting later archetypes' ``select`` calls
+    and produces non-local convergence changes — bad for debugging.
+    """
     records: list[dict] = []
     summaries: list[dict] = []
 
     for student in get_all_archetypes():
+        bandit = ContextualThompsonBandit(rng_seed=BANDIT_SEED)
         mastery = 0.0
         running_reward = 0.0
         n_confused = 0
