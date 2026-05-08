@@ -1,0 +1,8 @@
+{
+  "W_CONFUSION": 0.6334,
+  "W_MASTERY": 0.2388,
+  "W_ENGAGEMENT": 0.1278,
+  "r2_score": 1.0,
+  "trained_on_turns": 2000,
+  "note": "Learned via Ridge regression on simulation data. Replaces hardcoded weights in reward.py."
+}
