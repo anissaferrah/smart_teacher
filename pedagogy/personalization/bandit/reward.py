@@ -29,6 +29,28 @@ from dataclasses import dataclass
 log = logging.getLogger("personalization.bandit.reward")
 
 
+def _load_weights() -> tuple[float, float, float]:
+    """Load weights from learned_weights.json if it exists,
+    otherwise fall back to hardcoded defaults."""
+    import json
+    from pathlib import Path
+
+    weights_file = Path(__file__).resolve().parent / "learned_weights.json"
+    if weights_file.exists():
+        try:
+            with weights_file.open(encoding="utf-8") as f:
+                data = json.load(f)
+            w_c = float(data.get("W_CONFUSION",  0.50))
+            w_m = float(data.get("W_MASTERY",    0.40))
+            w_e = float(data.get("W_ENGAGEMENT", 0.10))
+            total = w_c + w_m + w_e
+            if total > 0:
+                return w_c / total, w_m / total, w_e / total
+        except Exception:
+            pass
+    return 0.50, 0.40, 0.10
+
+
 # ── Weights ─────────────────────────────────────────────────────────────
 #
 # Sum = 1.0. Documented rationale per weight :
@@ -47,9 +69,7 @@ log = logging.getLogger("personalization.bandit.reward")
 #                         great should still be slightly preferred over
 #                         silence.
 
-W_CONFUSION  = 0.50
-W_MASTERY    = 0.40
-W_ENGAGEMENT = 0.10
+W_CONFUSION, W_MASTERY, W_ENGAGEMENT = _load_weights()
 # Sanity check
 assert abs(W_CONFUSION + W_MASTERY + W_ENGAGEMENT - 1.0) < 1e-9
 
@@ -109,3 +129,46 @@ def compute_reward(outcome: TurnOutcome) -> float:
         reward, outcome.confusion_detected, raw_delta, outcome.engaged,
     )
     return reward
+
+
+@dataclass
+class DelayedOutcome:
+    """Outcome observed when a concept is revisited later.
+    
+    Attributes
+    ----------
+    fsrs_stability_gain : float
+        How much FSRS stability increased when the concept
+        was reviewed. Positive = student retained it.
+        In [0, 1] range.
+    turns_since_taught : int
+        How many turns passed between teaching and revisiting.
+    """
+    fsrs_stability_gain: float
+    turns_since_taught: int
+
+
+GAMMA = 0.30  # discount factor for delayed reward
+
+
+def compute_total_reward(
+    outcome: TurnOutcome,
+    delayed: DelayedOutcome | None = None,
+) -> float:
+    """Compute total reward combining immediate and delayed signals.
+    
+    If delayed outcome is provided (concept was revisited):
+        total = immediate_reward + GAMMA * delayed_reward
+    Otherwise:
+        total = immediate_reward (same as compute_reward)
+    
+    This implements the two-timescale reward described in the
+    personalisation design doc. GAMMA=0.30 follows standard
+    practice for episodic RL with short horizons (Sutton & Barto 2018).
+    """
+    immediate = compute_reward(outcome)
+    if delayed is None:
+        return immediate
+    delayed_reward = max(0.0, min(1.0, delayed.fsrs_stability_gain))
+    total = immediate + GAMMA * delayed_reward
+    return max(0.0, min(1.0, total))
