@@ -89,10 +89,16 @@ class ContextBucket:
     pace:           str   # "slow" | "normal" | "fast"
     mastery_level:  str   # "low" | "medium" | "high"
     kg_position:    str = "isolated"   # "isolated" | "blocked" | "ready"
+    confusion_level: str = "low"   # "low" | "high"
+    session_phase: str = "early"   # "early" | "late"
 
     @property
     def bucket_key(self) -> str:
-        return f"{self.learning_style}|{self.pace}|{self.mastery_level}|{self.kg_position}"
+        return (
+            f"{self.learning_style}|{self.pace}|"
+            f"{self.mastery_level}|{self.kg_position}|"
+            f"{self.confusion_level}|{self.session_phase}"
+        )
 
 
 def discretize_mastery(mastery_score: float) -> str:
@@ -135,11 +141,27 @@ def discretize_kg_position(prereqs_mastered_ratio: float | None) -> str:
     return "ready"
 
 
+def discretize_confusion(confusion_score: float) -> str:
+    """Discretize confusion score into low/high bucket.
+    Threshold at 0.5 — matches the fusion.py decision boundary.
+    """
+    return "high" if confusion_score >= 0.5 else "low"
+
+
+def discretize_session_phase(turn_number: int) -> str:
+    """Discretize session turn number into early/late bucket.
+    Sessions typically have 10-30 slides. Turn 15 is the midpoint.
+    """
+    return "late" if turn_number >= 15 else "early"
+
+
 def context_from_profile(
     learning_style: str,
     avg_response_time_s: float,
     mastery_score: float,
     prereqs_mastered_ratio: float | None = None,
+    confusion_score: float = 0.0,
+    turn_number: int = 0,
 ) -> ContextBucket:
     """Compose a ContextBucket from raw profile features.
 
@@ -147,12 +169,17 @@ def context_from_profile(
       - Sur le concept que l'eleve s'apprete a aborder, ratio des prereqs
         (kg.prerequisites_of) deja maitrises (mastery >= MASTERY_THRESHOLD).
       - None si pas de KG dispo ou concept root → bucket "isolated".
+    
+    `confusion_score` : model's confidence that student is confused [0, 1].
+    `turn_number` : session turn index for phase-of-session bucketing.
     """
     return ContextBucket(
         learning_style=(learning_style or "mixed").lower(),
         pace=discretize_response_time(avg_response_time_s or 0.0),
         mastery_level=discretize_mastery(mastery_score or 0.5),
         kg_position=discretize_kg_position(prereqs_mastered_ratio),
+        confusion_level=discretize_confusion(confusion_score),
+        session_phase=discretize_session_phase(turn_number),
     )
 
 
@@ -199,6 +226,20 @@ class ArmPosterior:
         self.alpha += r
         self.beta += 1.0 - r
 
+    def decay(self, factor: float = 0.95) -> None:
+        """Shrink posterior certainty toward the prior.
+        
+        Multiplies the earned evidence (alpha-1, beta-1) by factor,
+        keeping the Beta(1,1) prior mass intact. This handles
+        non-stationarity: a student who changes over time should
+        make the bandit slightly less certain about old observations.
+        
+        factor=0.95 means 5% forgetting per decay call.
+        Called every N turns by the bandit (default N=5).
+        """
+        self.alpha = 1.0 + (self.alpha - 1.0) * factor
+        self.beta = 1.0 + (self.beta - 1.0) * factor
+
 
 # ── The bandit itself ───────────────────────────────────────────────────
 
@@ -220,8 +261,13 @@ class ContextualThompsonBandit:
     rng_seed:   int | None = None
     _rng:       random.Random = field(init=False, repr=False)
 
+    # Class constants for temporal discounting
+    DECAY_EVERY:  int = 5         # Decay posteriors every N turns
+    DECAY_FACTOR: float = 0.95    # Per-decay shrinkage factor
+
     def __post_init__(self) -> None:
         self._rng = random.Random(self.rng_seed) if self.rng_seed is not None else random.Random()
+        self._turn_count = 0  # Track turns for auto-decay
 
     # ── Helpers ─────────────────────────────────────────────────────
 
@@ -298,10 +344,22 @@ class ContextualThompsonBandit:
         """Apply the Beta-Bernoulli update for the (bucket, arm) pair."""
         post = self._post(bucket, action)
         post.update(reward)
+        self._turn_count += 1
+        if self._turn_count % self.DECAY_EVERY == 0:
+            self.decay_all(self.DECAY_FACTOR)
         log.debug(
             "bandit.update bucket=%s arm=%s reward=%.3f → α=%.2f β=%.2f",
             bucket.bucket_key, action.arm_id, reward, post.alpha, post.beta,
         )
+
+    def decay_all(self, factor: float = 0.95) -> None:
+        """Apply temporal decay to ALL arm posteriors.
+        
+        Call this every N turns to model student non-stationarity.
+        Preserves the Beta(1,1) prior — only earned evidence decays.
+        """
+        for post in self.posteriors.values():
+            post.decay(factor)
 
     # ── Inspection ─────────────────────────────────────────────────
 
@@ -329,6 +387,45 @@ class ContextualThompsonBandit:
                 best_mean = post.mean
                 best = action
         return best
+
+    def update_delayed(
+        self,
+        bucket: ContextBucket,
+        action: StrategyAction,
+        delayed_reward: float,
+        gamma: float = 0.30,
+    ) -> None:
+        """Apply a delayed reward update when a concept is revisited.
+        
+        Called by the teaching pipeline when FSRS detects that a
+        previously taught concept has been successfully retained.
+        Updates the arm that was used when the concept was first
+        taught, weighted by gamma (the temporal discount factor).
+        
+        gamma=0.30 follows Sutton & Barto 2018 for short-horizon
+        episodic tasks.
+        
+        Parameters
+        ----------
+        bucket : ContextBucket
+            The context bucket AT THE TIME the concept was taught
+            (not the current bucket).
+        action : StrategyAction
+            The arm that was selected when the concept was taught.
+        delayed_reward : float
+            FSRS stability gain, in [0, 1].
+        gamma : float
+            Discount factor for the delayed signal.
+        """
+        discounted = max(0.0, min(1.0, gamma * delayed_reward))
+        post = self._post(bucket, action)
+        post.update(discounted)
+        log.debug(
+            "bandit.update_delayed bucket=%s arm=%s "
+            "delayed=%.3f gamma=%.2f discounted=%.3f",
+            bucket.bucket_key, action.arm_id,
+            delayed_reward, gamma, discounted,
+        )
 
     # ── Serialization ──────────────────────────────────────────────
 
