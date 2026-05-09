@@ -87,6 +87,24 @@ def all_actions() -> Iterator[StrategyAction]:
             yield StrategyAction(strategy=strat, speech_rate=rate)
 
 
+def action_from_arm_id(arm_id: str) -> StrategyAction | None:
+    """Reconstruct a StrategyAction from its arm_id string.
+    
+    arm_id format: "strategy_value:rate_value"
+    Example: "socratic:fast" -> StrategyAction(Strategy.SOCRATIC, SpeechRate.FAST)
+    Returns None if arm_id is invalid.
+    """
+    try:
+        parts = arm_id.split(":")
+        if len(parts) != 2:
+            return None
+        strategy = Strategy(parts[0])
+        rate = SpeechRate(parts[1])
+        return StrategyAction(strategy, rate)
+    except (ValueError, KeyError, AttributeError):
+        return None
+
+
 # ── Prompt fragments per strategy (FR + EN) ────────────────────────────
 #
 # These fragments are injected into the LLM prompt when the bandit

@@ -57,6 +57,7 @@ from pedagogy.personalization.bandit.repo import (
     mark_dirty,
     maybe_save_periodically,
     record_pending,
+    record_concept_arm,
 )
 from pedagogy.personalization.bandit.reward import TurnOutcome, compute_reward
 from pedagogy.personalization.bandit.strategies import (
@@ -235,6 +236,20 @@ class BanditController:
         except Exception as exc:                                          # noqa: BLE001
             log.warning("bandit record_pending failed: %s", exc)
 
+        # Also store concept→arm mapping for delayed reward lookup.
+        # This is separate from pending (which end_turn consumes).
+        # TTL = 7 days (concept may be reviewed in a future session).
+        if primary_concept:
+            try:
+                await record_concept_arm(
+                    student_id=student_id or session_id,
+                    concept_name=primary_concept,
+                    context=context,
+                    action=action,
+                )
+            except Exception as exc:                                      # noqa: BLE001
+                log.debug("record_concept_arm failed (non-fatal): %s", exc)
+
         log.info(
             "🔍 bandit START | session=%s ctx_bucket=%s | strategy=%s speech_rate=%s | reasoning=%r",
             session_id[:8] if session_id else "?",
@@ -291,3 +306,98 @@ class BanditController:
             mastery_after - pending.mastery_before, confusion_detected, engaged,
         )
         return True
+
+    async def on_concept_reviewed(
+        self,
+        *,
+        session_id: str,
+        concept_name: str,
+        stability_before: float,
+        stability_after: float,
+        student_id: str | None = None,
+    ) -> bool:
+        """Apply delayed reward when FSRS confirms concept retention.
+
+        Called by ReviewScheduler after a successful concept review.
+        Looks up the (context, action) that taught this concept and
+        applies a discounted reward based on FSRS stability gain.
+
+        Parameters
+        ----------
+        session_id : str
+            Current session identifier.
+        concept_name : str
+            The concept that was just reviewed (matches primary_concept
+            in the teaching decision).
+        stability_before : float
+            FSRS stability before the review.
+        stability_after : float
+            FSRS stability after the review.
+        student_id : str | None
+            Student identifier (for concept-to-arm lookup). If not
+            provided, session_id is used instead.
+
+        Returns True if delayed reward was applied, False otherwise.
+        """
+        stability_gain = max(0.0, stability_after - stability_before)
+        if stability_gain <= 0:
+            return False
+
+        normalized_gain = min(1.0, stability_gain / 30.0)
+        
+        lookup_id = student_id or session_id
+        
+        try:
+            from pedagogy.personalization.bandit.repo import get_concept_arm
+            result = await get_concept_arm(lookup_id, concept_name)
+        except Exception as exc:                                          # noqa: BLE001
+            log.warning("get_concept_arm failed: %s", exc)
+            return False
+        
+        if result is None:
+            log.debug(
+                "on_concept_reviewed: no arm record for student=%s concept=%s",
+                (lookup_id or "?")[:8], concept_name,
+            )
+            return False
+        
+        bucket_key, arm_id = result
+        
+        try:
+            from pedagogy.personalization.bandit.strategies import action_from_arm_id
+            action = action_from_arm_id(arm_id)
+            if action is None:
+                return False
+        except Exception as exc:                                          # noqa: BLE001
+            log.warning("action_from_arm_id failed: %s", exc)
+            return False
+        
+        try:
+            bandit = await get_bandit()
+            # Direct posterior key lookup — bypass bucket reconstruction.
+            # The posterior key is the combination of bucket_key and arm_id.
+            posterior_key = f"{bucket_key}|{arm_id}"
+            if posterior_key in bandit.posteriors:
+                post = bandit.posteriors[posterior_key]
+                # Apply discounted delayed reward (gamma = 0.30)
+                discounted = max(0.0, min(1.0, 0.30 * normalized_gain))
+                post.update(discounted)
+                mark_dirty()
+                await maybe_save_periodically()
+                log.info(
+                    "bandit.delayed student=%s concept=%s arm=%s "
+                    "stability %.2f->%.2f normalized=%.3f discounted=%.3f",
+                    (lookup_id or "?")[:8], concept_name, arm_id,
+                    stability_before, stability_after,
+                    normalized_gain, discounted,
+                )
+                return True
+            else:
+                log.debug(
+                    "on_concept_reviewed: posterior key not found: %s",
+                    posterior_key,
+                )
+                return False
+        except Exception as exc:                                          # noqa: BLE001
+            log.warning("on_concept_reviewed bandit update failed: %s", exc)
+            return False

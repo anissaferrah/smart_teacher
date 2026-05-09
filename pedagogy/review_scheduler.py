@@ -82,6 +82,7 @@ class ReviewScheduler:
         student_id,
         concept_name: str,
         rating_str: str,   # "again" | "hard" | "good" | "easy"
+        session_id: str | None = None,
     ) -> Optional[datetime]:
         """Hook a appeler apres chaque practice/Q&A pour scheduler la prochaine review.
 
@@ -168,6 +169,24 @@ class ReviewScheduler:
                     f"📅 Review scheduled: student={sid} concept='{concept_name}' "
                     f"rating={rating_str} next_due={next_due}"
                 )
+
+                # Notify bandit of FSRS outcome for delayed reward
+                if session_id:
+                    try:
+                        from pedagogy.personalization.bandit.controller import BanditController
+                        stability_before = float(getattr(card, "stability", 0.0))
+                        stability_after  = float(getattr(new_card, "stability", 0.0))
+                        _bandit_ctrl = BanditController()
+                        await _bandit_ctrl.on_concept_reviewed(
+                            session_id=session_id,
+                            concept_name=concept_name,
+                            stability_before=stability_before,
+                            stability_after=stability_after,
+                            student_id=str(sid) if sid else None,
+                        )
+                    except Exception as exc:                              # noqa: BLE001
+                        log.debug("bandit delayed reward hook failed (non-fatal): %s", exc)
+
                 return next_due
         except Exception as exc:
             log.warning(f"update_after_practice failed: {exc}")

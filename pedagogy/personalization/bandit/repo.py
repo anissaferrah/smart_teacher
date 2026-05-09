@@ -241,6 +241,56 @@ async def consume_pending(session_id: str) -> Optional[PendingDecision]:
         return None
 
 
+async def record_concept_arm(
+    student_id: str,
+    concept_name: str,
+    context: "ContextBucket",
+    action: "StrategyAction",
+    ttl: int = 604800,  # 7 days
+) -> None:
+    """Store the (context, action) used to teach a concept.
+    
+    Key: bandit:concept_arm:{student_id}:{concept_name}
+    Value: JSON with context bucket_key and action arm_id
+    TTL: 7 days (concept may be reviewed in a future session)
+    """
+    if not student_id or not concept_name:
+        return
+    try:
+        r = await _get_redis()
+        key = f"bandit:concept_arm:{student_id}:{concept_name}"
+        value = json.dumps({
+            "bucket_key": context.bucket_key,
+            "arm_id": action.arm_id,
+        })
+        await r.setex(key, ttl, value)
+    except Exception as exc:                                              # noqa: BLE001
+        log.warning("bandit record_concept_arm failed for %s:%s: %s", student_id[:8], concept_name[:20], exc)
+
+
+async def get_concept_arm(
+    student_id: str,
+    concept_name: str,
+) -> Optional[tuple[str, str]]:
+    """Retrieve (bucket_key, arm_id) for a concept.
+    
+    Returns None if not found or expired.
+    """
+    if not student_id or not concept_name:
+        return None
+    try:
+        r = await _get_redis()
+        key = f"bandit:concept_arm:{student_id}:{concept_name}"
+        raw = await r.get(key)
+        if not raw:
+            return None
+        data = json.loads(raw)
+        return data["bucket_key"], data["arm_id"]
+    except Exception as exc:                                              # noqa: BLE001
+        log.debug("bandit get_concept_arm failed for %s:%s: %s", student_id[:8], concept_name[:20], exc)
+        return None
+
+
 # ── Test helpers ────────────────────────────────────────────────────────
 
 
