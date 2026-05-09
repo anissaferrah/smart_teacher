@@ -103,7 +103,7 @@ class TurnOutcome:
 # at most ~0.3 in a single attempt (e.g. from 1/3 to 2/4 = +0.17, or
 # 0/2 to 1/3 = +0.33). Saturating at 0.3 prevents a single noisy
 # attempt from dominating the reward.
-_MAX_DELTA = 0.30
+_MAX_DELTA = 0.15
 
 
 def compute_reward(outcome: TurnOutcome) -> float:

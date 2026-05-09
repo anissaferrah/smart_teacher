@@ -1,0 +1,226 @@
+[
+  {
+    "version": "V0-Baseline",
+    "archetype": "FastLearner",
+    "correct_arm_rate": 0.269,
+    "avg_reward_total": 0.495,
+    "improvement": 0.0119,
+    "reward_by_window": [
+      0.4885,
+      0.4985,
+      0.4793,
+      0.5084,
+      0.5003
+    ]
+  },
+  {
+    "version": "V0-Baseline",
+    "archetype": "DeepThinker",
+    "correct_arm_rate": 0.182,
+    "avg_reward_total": 0.5102,
+    "improvement": 0.0231,
+    "reward_by_window": [
+      0.4927,
+      0.5065,
+      0.5203,
+      0.5158,
+      0.5158
+    ]
+  },
+  {
+    "version": "V0-Baseline",
+    "archetype": "SlowLearner",
+    "correct_arm_rate": 0.366,
+    "avg_reward_total": 0.4492,
+    "improvement": 0.0987,
+    "reward_by_window": [
+      0.4016,
+      0.4295,
+      0.4618,
+      0.4525,
+      0.5004
+    ]
+  },
+  {
+    "version": "V0-Baseline",
+    "archetype": "InconsistentLearner",
+    "correct_arm_rate": 0.0,
+    "avg_reward_total": 0.3979,
+    "improvement": -0.0208,
+    "reward_by_window": [
+      0.4169,
+      0.3984,
+      0.3864,
+      0.3919,
+      0.3961
+    ]
+  },
+  {
+    "version": "V1-RicherBucket",
+    "archetype": "FastLearner",
+    "correct_arm_rate": 0.2045,
+    "avg_reward_total": 0.4906,
+    "improvement": 0.0264,
+    "reward_by_window": [
+      0.4842,
+      0.485,
+      0.4768,
+      0.4966,
+      0.5106
+    ]
+  },
+  {
+    "version": "V1-RicherBucket",
+    "archetype": "DeepThinker",
+    "correct_arm_rate": 0.173,
+    "avg_reward_total": 0.5093,
+    "improvement": 0.0248,
+    "reward_by_window": [
+      0.4922,
+      0.502,
+      0.5222,
+      0.5131,
+      0.5171
+    ]
+  },
+  {
+    "version": "V1-RicherBucket",
+    "archetype": "SlowLearner",
+    "correct_arm_rate": 0.2305,
+    "avg_reward_total": 0.4169,
+    "improvement": 0.0762,
+    "reward_by_window": [
+      0.3855,
+      0.3939,
+      0.4198,
+      0.4238,
+      0.4617
+    ]
+  },
+  {
+    "version": "V1-RicherBucket",
+    "archetype": "InconsistentLearner",
+    "correct_arm_rate": 0.0,
+    "avg_reward_total": 0.3953,
+    "improvement": -0.0184,
+    "reward_by_window": [
+      0.4159,
+      0.4017,
+      0.3792,
+      0.3819,
+      0.3975
+    ]
+  },
+  {
+    "version": "V2-Decay",
+    "archetype": "FastLearner",
+    "correct_arm_rate": 0.1195,
+    "avg_reward_total": 0.472,
+    "improvement": -0.009,
+    "reward_by_window": [
+      0.4792,
+      0.4867,
+      0.4506,
+      0.4735,
+      0.4702
+    ]
+  },
+  {
+    "version": "V2-Decay",
+    "archetype": "DeepThinker",
+    "correct_arm_rate": 0.098,
+    "avg_reward_total": 0.4952,
+    "improvement": -0.0147,
+    "reward_by_window": [
+      0.494,
+      0.4994,
+      0.5073,
+      0.4961,
+      0.4793
+    ]
+  },
+  {
+    "version": "V2-Decay",
+    "archetype": "SlowLearner",
+    "correct_arm_rate": 0.1605,
+    "avg_reward_total": 0.3955,
+    "improvement": 0.0386,
+    "reward_by_window": [
+      0.3837,
+      0.3784,
+      0.3978,
+      0.3956,
+      0.4223
+    ]
+  },
+  {
+    "version": "V2-Decay",
+    "archetype": "InconsistentLearner",
+    "correct_arm_rate": 0.0,
+    "avg_reward_total": 0.3957,
+    "improvement": 0.004,
+    "reward_by_window": [
+      0.4065,
+      0.3915,
+      0.3957,
+      0.3743,
+      0.4105
+    ]
+  },
+  {
+    "version": "V3-Full",
+    "archetype": "FastLearner",
+    "correct_arm_rate": 0.1165,
+    "avg_reward_total": 0.471,
+    "improvement": 0.0098,
+    "reward_by_window": [
+      0.4729,
+      0.4737,
+      0.4508,
+      0.4747,
+      0.4827
+    ]
+  },
+  {
+    "version": "V3-Full",
+    "archetype": "DeepThinker",
+    "correct_arm_rate": 0.1015,
+    "avg_reward_total": 0.4943,
+    "improvement": -0.0058,
+    "reward_by_window": [
+      0.4935,
+      0.4962,
+      0.504,
+      0.4899,
+      0.4877
+    ]
+  },
+  {
+    "version": "V3-Full",
+    "archetype": "SlowLearner",
+    "correct_arm_rate": 0.1685,
+    "avg_reward_total": 0.392,
+    "improvement": 0.0222,
+    "reward_by_window": [
+      0.3917,
+      0.3712,
+      0.3928,
+      0.3902,
+      0.414
+    ]
+  },
+  {
+    "version": "V3-Full",
+    "archetype": "InconsistentLearner",
+    "correct_arm_rate": 0.0,
+    "avg_reward_total": 0.3939,
+    "improvement": -0.0156,
+    "reward_by_window": [
+      0.4024,
+      0.3987,
+      0.3943,
+      0.3873,
+      0.3868
+    ]
+  }
+]
