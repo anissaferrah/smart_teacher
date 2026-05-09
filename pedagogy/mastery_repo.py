@@ -42,6 +42,7 @@ threshold by chance.
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -125,6 +126,103 @@ class MasteryRepo:
         except Exception as exc:
             log.debug(f"get_score failed: {exc}")
             return 0.5
+
+    @staticmethod
+    async def get_score_with_decay(
+        student_id,
+        course_id,
+        idea_id: str,
+        fsrs_stability: float | None = None,
+    ) -> float:
+        """Compute mastery score with Ebbinghaus forgetting decay.
+        
+        Uses the standard forgetting curve:
+            R = e^(-t / S)
+        where:
+            t = days since last interaction
+            S = FSRS stability (how many days before 90% forgetting)
+            R = retention factor in [0, 1]
+        
+        The decayed score is: raw_score * retention
+        
+        If fsrs_stability is None or 0, uses a default stability
+        of 1.0 day (aggressive decay — student forgets fast without
+        FSRS data).
+        
+        If last_seen is None (never interacted), returns 0.5
+        (uniform prior — we know nothing).
+        
+        Parameters
+        ----------
+        student_id : any
+            Student identifier.
+        course_id : any  
+            Course identifier.
+        idea_id : str
+            Concept/idea identifier.
+        fsrs_stability : float | None
+            FSRS stability value in days. If None, defaults to 1.0.
+        
+        Returns float in [0, 1].
+        """
+        sid = _coerce_uuid(student_id)
+        cid = _coerce_uuid(course_id)
+        if not sid or not idea_id:
+            return 0.5
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                stmt = select(
+                    StudentMastery.attempts,
+                    StudentMastery.confusions,
+                    StudentMastery.last_seen_at,
+                ).where(
+                    StudentMastery.student_id == sid,
+                    StudentMastery.course_id == cid,
+                    StudentMastery.idea_id == idea_id,
+                )
+                row = (await db.execute(stmt)).first()
+                if row is None:
+                    return 0.5
+                
+                attempts, confusions, last_seen_at = int(row[0] or 0), int(row[1] or 0), row[2]
+                
+                # If not enough data, return raw score without decay
+                if attempts < MIN_ATTEMPTS_FOR_MASTERY:
+                    return _laplace_score(attempts, confusions)
+                
+                # Compute raw score
+                raw_score = _laplace_score(attempts, confusions)
+                
+                # If no last_seen timestamp, return raw score
+                if last_seen_at is None:
+                    return raw_score
+                
+                # Compute days since last interaction
+                now = datetime.utcnow()
+                time_delta = now - last_seen_at
+                days_since = max(0.0, time_delta.total_seconds() / 86400.0)
+                
+                # Compute stability (default 1.0 day)
+                stability = max(1.0, fsrs_stability or 1.0)
+                
+                # Apply Ebbinghaus decay: R = e^(-t / S)
+                retention = math.exp(-days_since / stability)
+                retention = max(0.0, min(1.0, retention))  # Clamp to [0, 1]
+                
+                # Return decayed score
+                decayed = raw_score * retention
+                
+                log.debug(
+                    "mastery decay: idea=%s days=%.1f stability=%.1f retention=%.3f "
+                    "raw=%.3f decayed=%.3f",
+                    str(idea_id)[:20], days_since, stability, retention, raw_score, decayed,
+                )
+                
+                return decayed
+        except Exception as exc:
+            log.debug(f"get_score_with_decay failed, falling back to get_score: {exc}")
+            return await MasteryRepo.get_score(student_id, course_id, idea_id)
 
     @staticmethod
     async def upsert_score(
