@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "1dc5d426-44e6-4c98-860e-ad76777edde2",
+  "turn_id": 4,
+  "question_audio_path": "turns/questions/1dc5d426-44e6-4c98-860e-ad76777edde2/4_1778893089116.webm",
+  "question_text": "is a key part of typically",
+  "answer_text": "The knowledge discovery process typically involves several steps, and data mining is a key part of this process.",
+  "language": "en",
+  "subject": "language",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining Introduction",
+  "chapter_index": 0,
+  "section_index": 2,
+  "char_position": 497,
+  "audio_answer_path": "turns/answers/1dc5d426-44e6-4c98-860e-ad76777edde2/4_1778893089116.mp3"
+}

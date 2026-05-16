@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "2e83a07c-4bc6-40f6-86ae-c528055d1b36",
+  "turn_id": 2,
+  "question_audio_path": "turns/questions/2e83a07c-4bc6-40f6-86ae-c528055d1b36/2_1778947329227.webm",
+  "question_text": "can you tell me what is the weather today ?",
+  "answer_text": "Let's recap what we've discussed so far: we've talked about the knowledge discovery process, which involves extracting insights from data, and we've also covered the introduction to AI, including various topics such as neural networks and machine learning. We were also exploring the concept of data mining, using an analogy of a box of colored balls to represent finding patterns in data. Now, regarding your question about the weather today, this point is not covered in our current course material on data mining, can you think of why that might be the case?",
+  "language": "en",
+  "subject": "geography",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 7,
+  "char_position": 463,
+  "audio_answer_path": "turns/answers/2e83a07c-4bc6-40f6-86ae-c528055d1b36/2_1778947329227.mp3"
+}

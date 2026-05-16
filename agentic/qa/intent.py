@@ -418,7 +418,9 @@ class IntentAgent:
             "timings": {**state.get("timings", {}), "intent": round(time.time() - start, 3)},
         }
         if intent_type == "question":
-            anchored = str(data.get("anchored_concept", "") or "").strip()
+            anchored = str(
+                data.get("anchored_concept") or data.get("anchoredconcept") or data.get("anchoredConcept") or ""
+            ).strip()
             rewritten = str(data.get("rewritten", "") or "").strip().strip('"').strip("«»").strip()
             needed_rewrite = bool(data.get("needed_rewrite", False))
             # Operational guard: empty/oversized rewrites fall back to raw.

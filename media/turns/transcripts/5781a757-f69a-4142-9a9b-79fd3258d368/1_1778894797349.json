@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "5781a757-f69a-4142-9a9b-79fd3258d368",
+  "turn_id": 1,
+  "question_text": "What is the knowledge discovery process?",
+  "answer_text": "The knowledge discovery process refers to the overall process of identifying useful knowledge, patterns, or relationships from data, which is a key concept in data mining. In simpler terms, it's about extracting insights from data to inform decisions. Think of it like finding valuable information hidden within a large dataset, and data mining acts as a bridge between raw data and actionable knowledge. For example, in the context of data mining, the knowledge discovery process involves several steps, including data collection, data preprocessing, and applying algorithms to extract patterns. To understand this process, you need to know that data mining is an interdisciplinary field that has evolved under various names, reflecting its diverse applications and methodologies.",
+  "language": "en",
+  "subject": "cs",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining Introduction",
+  "chapter_index": 1,
+  "section_index": 2,
+  "char_position": 749,
+  "audio_answer_path": "turns/answers/5781a757-f69a-4142-9a9b-79fd3258d368/1_1778894797349.mp3"
+}

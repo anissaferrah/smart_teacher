@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "5781a757-f69a-4142-9a9b-79fd3258d368",
+  "turn_id": 2,
+  "question_audio_path": "turns/questions/5781a757-f69a-4142-9a9b-79fd3258d368/2_1778894818194.webm",
+  "question_text": "Hello? What is your name?",
+  "answer_text": "My name is Smart Teacher, and I'm an AI tutor here to help you with your questions and provide explanations on the topics we're covering in class. What's on your mind today?",
+  "language": "en",
+  "subject": "language",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining Introduction",
+  "chapter_index": 0,
+  "section_index": 2,
+  "char_position": 257,
+  "audio_answer_path": "turns/answers/5781a757-f69a-4142-9a9b-79fd3258d368/2_1778894818194.mp3"
+}

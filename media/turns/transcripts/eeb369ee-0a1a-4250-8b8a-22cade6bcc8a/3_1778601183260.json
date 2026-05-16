@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "eeb369ee-0a1a-4250-8b8a-22cade6bcc8a",
+  "turn_id": 3,
+  "question_audio_path": "turns/questions/eeb369ee-0a1a-4250-8b8a-22cade6bcc8a/3_1778601183260.webm",
+  "question_text": "how that's the course distinguished between AI and data mining.",
+  "answer_text": "In this course, AI, or Artificial Intelligence, is likely distinguished from data mining as AI refers to the broader field of creating intelligent systems that can perform tasks that typically require human intelligence, such as learning, problem-solving, and decision-making. Data mining, on the other hand, is a specific subset of AI that focuses on the discovery of patterns, relationships, and insights from large datasets, using various techniques such as machine learning and statistical analysis. So, while data mining is a part of AI, not all AI is data mining.",
+  "language": "en",
+  "subject": "cs",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 1,
+  "char_position": 201,
+  "audio_answer_path": "turns/answers/eeb369ee-0a1a-4250-8b8a-22cade6bcc8a/3_1778601183260.mp3"
+}

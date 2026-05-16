@@ -223,13 +223,13 @@ body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--tex
   <div class="logo">🎓 Smart Teacher</div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="sw('course')">📖 Cours</button>
-    <button class="nav-tab" onclick="window.open('/static/courses.html','_blank')" title="Manage domains, subjects and courses">🗂️ Manage</button>
+    <button class="nav-tab" onclick="location.href='/static/courses.html'" title="Manage domains, subjects and courses">🗂️ Manage</button>
     <button class="nav-tab" id="quizBtn" onclick="askQuiz()" disabled>📝 Quiz</button>
     <button class="nav-tab" id="testerBtn" onclick="openInlineTest()" disabled title="Tester ta compréhension du concept courant">🎯 Tester</button>
-    <button class="nav-tab" id="profileBtn" onclick="window.open('/static/profile.html','_blank')">👤 Profil</button>
-    <button class="nav-tab" onclick="window.open('/static/skill_tree.html','_blank')">🌳 Skill Tree</button>
-    <button class="nav-tab" onclick="window.open('/static/concept_graph.html','_blank')">🧠 Concept Graph</button>
-    <button class="nav-tab" onclick="window.open('/dashboard','_blank')">📊 Dashboard</button>
+    <button class="nav-tab" id="profileBtn" onclick="location.href='/static/profile.html'">👤 Profil</button>
+    <button class="nav-tab" onclick="location.href='/static/skill_tree.html'">🌳 Skill Tree</button>
+    <button class="nav-tab" onclick="location.href='/static/concept_graph.html'">🧠 Concept Graph</button>
+    <button class="nav-tab" onclick="location.href='/dashboard'">📊 Dashboard</button>
     <div class="nav-status">
       <div class="status-dot" id="sdot"></div>
       <span class="status-text" id="stxt">Connexion…</span>
@@ -1852,8 +1852,7 @@ function buildQuizPageUrl(){
 function openQuizPage(){
   if(!cCourse){return null;}
   const url=buildQuizPageUrl();
-  const quizWindow=window.open(url,'_blank','noopener');
-  if(!quizWindow){window.location.href=url;}
+  window.location.href=url;
   return url;
 }
 

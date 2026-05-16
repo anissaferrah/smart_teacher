@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "d8197e4c-1c84-43b2-9421-f9f7aa4b6c93",
+  "turn_id": 5,
+  "question_audio_path": "turns/questions/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/5_1778428782797.webm",
+  "question_text": "I said, what is B25?",
+  "answer_text": "It seems like you're asking about something specific, but B25 isn't related to the RAG pipeline, which is what we're studying right now. Think of it like looking for a specific book in a library, if the book isn't on the shelf, we can't find it, and that's what's happening here, B25 isn't a topic we're covering in this course, so let's focus on understanding the RAG pipeline, which is a system that helps generate text.",
+  "language": "en",
+  "subject": "biology",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 0,
+  "char_position": 221,
+  "audio_answer_path": "turns/answers/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/5_1778428782797.mp3"
+}

@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "adb48591-6eba-4f13-8fbd-32a16724defa",
+  "turn_id": 7,
+  "question_audio_path": "turns/questions/adb48591-6eba-4f13-8fbd-32a16724defa/7_1778598229591.webm",
+  "question_text": "into the course.",
+  "answer_text": "Let's revisit the concept of data mining and its synonyms. The course material mentions that data mining has evolved under various names, reflecting its diverse applications and underlying methodologies. The synonyms mentioned, such as Knowledge Discovery in Databases (KDD), Knowledge Extraction, Data/Pattern Analysis, Business Intelligence (BI), and Big Data Analytics, all converge on the goal of extracting value from data. These terms are essentially different ways to describe the process of discovering patterns and insights from data, which is the core of data mining. To integrate this into the course, recall that data mining is the overall process of discovering patterns and extracting useful insights from large datasets, and these synonyms are just different names for this process.",
+  "language": "en",
+  "subject": "literature",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining General Process",
+  "chapter_index": 0,
+  "section_index": 8,
+  "char_position": 305,
+  "audio_answer_path": "turns/answers/adb48591-6eba-4f13-8fbd-32a16724defa/7_1778598229591.mp3"
+}

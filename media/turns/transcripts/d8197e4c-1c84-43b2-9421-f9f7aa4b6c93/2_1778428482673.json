@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "d8197e4c-1c84-43b2-9421-f9f7aa4b6c93",
+  "turn_id": 2,
+  "question_audio_path": "turns/questions/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/2_1778428482673.webm",
+  "question_text": "What is gradient?",
+  "answer_text": "Let's take a step back, we're discussing the RAG pipeline, but you asked about gradient, which is actually a concept from a different topic, it seems. To clarify, the RAG pipeline is like a recipe to generate text, and we're not covering gradients in this specific course, but I can give you a simple example: imagine you're climbing a hill, the steepness of the hill is like a gradient, it shows how fast you're going up, but in our RAG pipeline, we're focusing on how to retrieve and generate text, not climbing hills or calculating steepness.",
+  "language": "en",
+  "subject": "mathematics",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 0,
+  "char_position": 221,
+  "audio_answer_path": "turns/answers/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/2_1778428482673.mp3"
+}

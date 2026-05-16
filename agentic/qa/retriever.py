@@ -149,9 +149,11 @@ class RetrieverAgent:
                     "section_title": meta.get("section_title", ""),
                     "idea_id":     meta.get("idea_id"),
                     "idea_label":  meta.get("idea_label", ""),
+                    "slide_idx":   meta.get("slide_idx"),
                     "score":       float(score) if score is not None else 0.5,
                     "mastery_score": None,  # filled below
                     "seen":        False,
+                    "context_type": meta.get("context_type"),
                 })
         except Exception as exc:
             log.warning("retriever failed: %s", exc)
@@ -199,15 +201,54 @@ class RetrieverAgent:
             if Config.RAG_USE_GRAPH_EXPANSION else []
         )
 
-        # 6. Final list: original chunks + KG-augmented prereqs (capped).
-        # KG entries appended at the end so they don't displace direct
-        # retrieval hits in the responder's chunk-formatting top-K.
-        all_chunks = chunks + kg_augmented
+        # 6. N±1 cross-slide context for the rank-#1 hit only. Pulls the
+        # chunks on the slides immediately before and after the strongest
+        # match (same course, same chapter) so the LLM sees the
+        # surrounding lecture context. Limiting to the top hit keeps the
+        # prompt focused; downstream _MAX_CITED_CHUNKS still caps total.
+        top_neighbors: list[dict[str, Any]] = []
+        if chunks:
+            top = chunks[0]
+            t_chap = top.get("chapter")
+            t_slide = top.get("slide_idx")
+            if course_id and t_chap is not None and t_slide is not None:
+                try:
+                    nbr_docs = self.rag.get_slide_neighbors(
+                        course=course_id,
+                        chapter_idx=int(t_chap),
+                        slide_idx=int(t_slide),
+                        exclude_idea_ids={c.get("idea_id") for c in chunks if c.get("idea_id")},
+                    )
+                except Exception as exc:
+                    log.debug("get_slide_neighbors failed: %s", exc)
+                    nbr_docs = []
+                for d in nbr_docs:
+                    md = getattr(d, "metadata", {}) or {}
+                    top_neighbors.append({
+                        "content":       (getattr(d, "page_content", "") or "")[:1500],
+                        "source":        md.get("source", ""),
+                        "chapter":       md.get("chapter_idx", md.get("chapter")),
+                        "section_idx":   md.get("section_idx"),
+                        "section_title": md.get("section_title", ""),
+                        "idea_id":       md.get("idea_id"),
+                        "idea_label":    md.get("idea_label", ""),
+                        "slide_idx":     md.get("slide_idx"),
+                        "score":         0.0,
+                        "mastery_score": None,
+                        "seen":          False,
+                        "context_type":  "neighbor",
+                    })
+
+        # 7. Final list: hits + KG-augmented + N±1 neighbors of top hit.
+        # KG and neighbor entries trail the hits so they don't displace
+        # direct retrieval hits in the responder's chunk-formatting top-K.
+        all_chunks = chunks + kg_augmented + top_neighbors
 
         log.info(
-            "retriever: %d direct + %d kg-augmented (course=%s ch=%s, seen=%d, review_mode=%s)",
+            "retriever: %d direct + %d kg-augmented + %d N±1 neighbor(s) of top hit (course=%s ch=%s, seen=%d, review_mode=%s)",
             len(chunks),
             len(kg_augmented),
+            len(top_neighbors),
             (course_id or "")[:16],
             chapter_idx,
             sum(1 for c in chunks if c["seen"]),
@@ -225,6 +266,8 @@ class RetrieverAgent:
             tag = ""
             if c.get("_via_kg"):
                 tag = f"[kg:{c.get('_kg_relation', '?')}]"
+            elif c.get("context_type") == "neighbor":
+                tag = "[nbr]"
             log.info(
                 "🔍   chunk[%d] score=%.3f %s ch=%s sec=%s seen=%s mastery=%.2f | %r",
                 i,

@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "e1ffd83b-8104-488d-952a-15fe4f5a6d24",
+  "turn_id": 1,
+  "question_text": "can u speak in english not french",
+  "answer_text": "Je n'ai pas pu générer de réponse pour le moment. Réessayez dans un instant.",
+  "language": "en",
+  "subject": "language",
+  "chapter_title": "Chapitre 1",
+  "section_title": "Séance N° : 1 Traitement Automatique du Langage Naturel",
+  "chapter_index": 1,
+  "section_index": 0,
+  "char_position": 244,
+  "audio_answer_path": "turns/answers/e1ffd83b-8104-488d-952a-15fe4f5a6d24/1_1778007662503.mp3"
+}

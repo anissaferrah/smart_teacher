@@ -47,6 +47,7 @@ async def run_pipeline_streaming(
     dialogue=None,
     csv_logger=None,
     stt_logger=None,
+    qa_graph=None,                                  # NEW: routes audio through QA graph
 ):
     """🚀 STREAMING PIPELINE: Real-time LLM → TTS streaming.
     
@@ -105,107 +106,120 @@ async def run_pipeline_streaming(
         f"confusion_signals={prosody['markers']}"
     )
 
-    # ── 3. RAG retrieval ──────────────────────────────────────────────
-    # The previous version had a keyword-based action router here that
-    # branched into "quiz" / "code" / "rag" based on substring matches.
-    # That router has been removed — see the note above ``run_pipeline_streaming``.
-    # Every audio query now flows through the standard RAG retrieval path;
-    # higher-level routing (intent type, retrieve-or-skip) is handled by
-    # the agentic Q&A graph downstream.
+    # ── 3. Run the Q&A Graph (same pipeline text questions use) ──────
+    # Replaces the previous direct rag.retrieve_chunks + manual confusion
+    # detection + direct brain.ask call. The graph now handles:
+    #   - intent classification (incl. SIGHT-driven confusion detection)
+    #   - Self-RAG retrieve-or-skip routing
+    #   - query rewriting when needed
+    #   - RAG retrieval + reranker + smart-gate review
+    #   - mastery tracking, bandit selection, personalization
+    # Audio and text now produce equivalent answers.
     subject = detect_subject(text)
     if on_state_change:
         await on_state_change("rag_search", {})
-    try:
-        chunks_with_scores = await asyncio.to_thread(
-            rag.retrieve_chunks, text, k=Config.RAG_NUM_RESULTS, course_id=course_id
-        )
-    except Exception:
-        chunks_with_scores = []
 
-    # ── 4. Détection confusion ────────────────────────────────────────
-    # ✅ GÉNÉRALISATION: Appel unique qui détecte + met à jour Redis
-    # Inclut: mots-clés, répétition, patterns d'historique + SEMANTIC + PROSODY (Couches #1 + #2)
-    is_confused, confusion_reason, q_hash, confusion_count = await dialogue.detect_and_track_confusion(
-        session_id=session_id,
-        question_text=text,
-        language=lang,
-        history=history,  # ← Inclure l'historique pour pattern detection
-        brain=brain,      # ← Embeddings sémantiques (Couche D)
-        prosody=prosody,  # ← NOUVEAU: Marqueurs prosodiques (Couche #2)
-    )
-
-    # ── 4. LLM STREAMING (avec TTS en parallèle) ─────────────────────
     llm_start = time.time()
-    full_response = ""
+    full_response: str | None = ""
     tts_engine = "edge"
     tts_voice = ""
+    chunks_with_scores: list = []  # populated below from graph state (telemetry only)
 
-    # Construire le prompt : normal ou reformulation si confusion
-    last_slide = ctx.last_slide_explained if ctx else ""
+    # Hook: emit confusion preamble TTS as soon as IntentAgent fires
+    # SIGHT, so the student hears "Let me explain differently…" up front
+    # instead of waiting for the full reformulated answer.
+    _preamble_emitted = False
 
-    if is_confused:
-        # ✅ UPDATE STATE: Confusion Detected
+    async def _on_intent_classified(intent_obj):
+        nonlocal _preamble_emitted, tts_engine, tts_voice
+        intent_type = getattr(intent_obj, "type", "")
         if on_state_change:
-            await on_state_change("confusion_detected", {"reason": confusion_reason})
-        
-        # Prompt spécial reformulation
-        confusion_prompt = dialogue.build_confusion_prompt(
-            original_question=text,
-            language=lang,
-            last_slide_content=last_slide,
-        )
-        question_for_llm = confusion_prompt
-        log.info(f"[{session_id[:8]}] 📝 Prompt reformulation envoyé au LLM (audio)")
-    else:
-        # Prompt normal
-        question_for_llm = text
-    
-    # ✅ UPDATE STATE: LLM Thinking
-    if on_state_change:
-        await on_state_change("llm_thinking", {"chunks": len(chunks_with_scores)})
-
-    # Envoyer signal au frontend (pour afficher "Je vais reformuler...")
-    if is_confused and on_text_chunk:
-        preambles = {
-            "fr": "Permettez-moi de réexpliquer autrement. ",
-            "en": "Let me explain that differently. ",
-        }
-        preamble = preambles.get(lang[:2], preambles["fr"])
-        await on_text_chunk(preamble, preamble)
-
-        # Synthétiser et envoyer le préambule audio immédiatement
-        try:
-            pre_audio, _, pre_engine, pre_voice, pre_mime = await voice.generate_audio_async(
-                preamble, language_code=lang
+            await on_state_change(
+                "intent_classified",
+                {
+                    "intent_type": intent_type,
+                    "confidence": float(getattr(intent_obj, "confidence", 0.0)),
+                },
             )
-            if pre_audio and on_audio_chunk:
-                await on_audio_chunk(pre_audio, pre_mime)
-                log.info(f"[{session_id[:8]}] 📤 Preamble audio streamed")
-            tts_engine = pre_engine
-            tts_voice = pre_voice
-        except Exception as pre_exc:
-            log.warning(f"[{session_id[:8]}] ⚠️  Preamble TTS failed: {pre_exc}")
+        if intent_type == "confusion_signal" and not _preamble_emitted:
+            _preamble_emitted = True
+            preambles = {
+                "fr": "Permettez-moi de réexpliquer autrement. ",
+                "en": "Let me explain that differently. ",
+            }
+            preamble = preambles.get(lang[:2], preambles["fr"])
+            if on_text_chunk:
+                await on_text_chunk(preamble, preamble)
+            try:
+                pre_audio, _, pre_engine, pre_voice, pre_mime = await voice.generate_audio_async(
+                    preamble, language_code=lang,
+                )
+                if pre_audio and on_audio_chunk:
+                    await on_audio_chunk(pre_audio, pre_mime)
+                    log.info(f"[{session_id[:8]}] 📤 Preamble audio streamed")
+                tts_engine = pre_engine
+                tts_voice = pre_voice
+            except Exception as pre_exc:                                  # noqa: BLE001
+                log.warning(f"[{session_id[:8]}] ⚠️ Preamble TTS failed: {pre_exc}")
 
-    # ✅ UPDATE STATE: Streaming LLM → TTS
+    try:
+        if qa_graph is None:
+            raise RuntimeError("qa_graph not injected")
+        from agentic.qa.runner import run_qa_graph
+        qa_result = await run_qa_graph(
+            text=text,
+            session_id=session_id,
+            course_id=course_id or "",
+            student_id=(getattr(ctx, "student_id", None) if ctx else None),
+            language=lang,
+            chapter_idx=((ctx.chapter_index + 1)
+                         if ctx and ctx.chapter_index is not None else None),
+            chapter_title=(getattr(ctx, "chapter_title", "") if ctx else ""),
+            section_idx=(getattr(ctx, "section_index", 0) if ctx else 0),
+            section_title=(getattr(ctx, "section_title", "") if ctx else ""),
+            last_slide_content=(ctx.last_slide_explained if ctx else ""),
+            history=history,
+            student_level=(getattr(ctx, "student_level", "lycée") if ctx else "lycée"),
+            qa_graph=qa_graph,
+            brain=brain,
+            on_intent_classified=_on_intent_classified,
+        )
+        full_response = qa_result["answer"]
+        chunks_with_scores = (qa_result.get("qa_final") or {}).get("retrieved_chunks") or []
+        log.info(
+            f"[{session_id[:8]}] 🧠 QA Graph (audio) done | "
+            f"intent={getattr(qa_result.get('intent'), 'type', '?')} | "
+            f"chars={len(full_response)} chunks={len(chunks_with_scores)}"
+        )
+    except Exception as graph_exc:                                        # noqa: BLE001
+        log.warning(
+            f"[{session_id[:8]}] ⚠️ QA Graph failed ({type(graph_exc).__name__}): "
+            f"{str(graph_exc)[:120]} → Fallback brain.ask..."
+        )
+        llm_error = type(graph_exc).__name__
+        try:
+            full_response, _ = await asyncio.to_thread(
+                brain.ask, text, reply_language=lang, session_id=session_id,
+            )
+            full_response = brain._clean_for_speech(full_response or "")
+        except Exception as fallback_exc:                                 # noqa: BLE001
+            log.error(f"[{session_id[:8]}] ❌ Fallback also failed: {fallback_exc}")
+            llm_error = f"LLM unavailable ({type(fallback_exc).__name__})"
+            full_response = None
+
     if on_state_change:
         await on_state_change("streaming_llm", {})
-    
-    # Direct LLM call (agentic pipeline removed — to be redesigned)
-    try:
-        full_response, _ = await asyncio.to_thread(
-            brain.ask,
-            question_for_llm,
-            reply_language=lang,
-            session_id=session_id,
-        )
-        full_response = brain._clean_for_speech(full_response)
 
+    # TTS — only if the LLM produced a usable response. The previous
+    # outer LLM try/except wrapper here ran brain.ask again on TTS
+    # failure, which was both redundant (the run_qa_graph block above
+    # already handles its own fallback) and incorrect (TTS errors are
+    # not LLM errors). Removed.
+    if full_response:
         if on_text_chunk:
             await on_text_chunk(full_response, full_response)
-
         if on_state_change:
             await on_state_change("tts_generating", {"response_length": len(full_response)})
-
         try:
             tts_t0 = time.time()
             log.info(
@@ -225,43 +239,8 @@ async def run_pipeline_streaming(
             if audio_bytes and on_audio_chunk:
                 await on_audio_chunk(audio_bytes, mime)
                 log.info(f"[{session_id[:8]}] 📤 Audio streamed: {len(audio_bytes)} bytes")
-        except Exception as tts_exc:
+        except Exception as tts_exc:                                      # noqa: BLE001
             log.error(f"[{session_id[:8]}] ❌ TTS error: {tts_exc}")
-
-    except Exception as llm_exc:
-        log.warning(
-            f"[{session_id[:8]}] ⚠️  LLM streaming failed ({type(llm_exc).__name__}): "
-            f"{str(llm_exc)[:100]} → Fallback direct..."
-        )
-        llm_error = type(llm_exc).__name__  # ✅ Track error type
-
-        try:
-            full_response, _ = await asyncio.to_thread(
-                brain.ask,
-                text,
-                reply_language=lang,
-                session_id=session_id,
-            )
-            full_response = brain._clean_for_speech(full_response)
-
-            if full_response.strip():
-                audio_bytes, _, tts_engine, tts_voice, mime = await voice.generate_audio_async(
-                    full_response, language_code=lang
-                )
-                if audio_bytes and on_audio_chunk:
-                    await on_audio_chunk(audio_bytes, mime)
-                    log.info(
-                        f"[{session_id[:8]}] 📤 Fallback audio streamed: {len(audio_bytes)} bytes"
-                    )
-
-            if on_text_chunk:
-                await on_text_chunk(full_response, full_response)
-
-        except Exception as fallback_exc:
-            log.error(f"[{session_id[:8]}] ❌ Fallback also failed: {fallback_exc}")
-            # ✅ Return error status instead of generic message
-            llm_error = f"LLM unavailable ({type(fallback_exc).__name__})"
-            full_response = None  # Mark as failure
 
     llm_time = time.time() - llm_start
 
@@ -330,26 +309,45 @@ async def run_pipeline_streaming(
         log.info(f"[{session_id[:8]}]    📈 KPI: {'✅ PASS' if kpi_ok else '⚠️  SLOW'} (limit={Config.MAX_RESPONSE_TIME}s)")
         log.info(f"[{session_id[:8]}]    🌍 Language: {lang.upper()} ({lang_prob:.0%})")
 
+    # Confusion fields now derived from the graph's intent classification
+    # (SIGHT runs inside IntentAgent, sets intent.type=="confusion_signal").
+    # The pre-graph dialogue.detect_and_track_confusion call was removed
+    # in the audio→graph migration; q_hash and confusion_count were only
+    # used by that call's Redis bookkeeping and have no consumers downstream.
+    _graph_intent = None
+    try:
+        _graph_intent = qa_result.get("intent") if "qa_result" in locals() else None
+    except Exception:                                                     # noqa: BLE001
+        _graph_intent = None
+    _is_confused = bool(_graph_intent and getattr(_graph_intent, "type", "") == "confusion_signal")
+    _confusion_reason = "sight_model" if _is_confused else ""
+
+    # Chunks now arrive as dicts from the QA retriever (content, score,
+    # source, idea_id, ...), not as (Document, score, source) tuples
+    # like the old direct rag.retrieve_chunks call returned.
+    _chunks_details = []
+    for ch in (chunks_with_scores or []):
+        if isinstance(ch, dict):
+            content = str(ch.get("content", "") or "")
+            _chunks_details.append({
+                "text": content[:400] + ("..." if len(content) > 400 else ""),
+                "score": round(float(ch.get("score", 0.0)), 3),
+                "source": str(ch.get("source", "") or ""),
+            })
+
     return {
         "transcription": {"text": text, "language": lang, "confidence": round(lang_prob, 2)},
         "answer": full_response,
         "subject": subject,
         "rag_chunks": len(chunks_with_scores),
-        "rag_chunks_details": [
-            {
-                "text": (doc.page_content[:400] + ("..." if len(doc.page_content) > 400 else "")) if doc is not None else "",
-                "score": round(score, 3),
-                "source": source,
-            }
-            for (doc, score, source) in (chunks_with_scores or [])
-        ],
+        "rag_chunks_details": _chunks_details,
         "tts_engine": tts_engine,
         "tts_voice": tts_voice,
         "confusion": {
-            "detected": bool(is_confused),
-            "reason": confusion_reason,
-            "hash": q_hash,
-            "count": confusion_count,
+            "detected": _is_confused,
+            "reason": _confusion_reason,
+            "hash": "",
+            "count": 0,
         },
         "question_text": text,
         "performance": {

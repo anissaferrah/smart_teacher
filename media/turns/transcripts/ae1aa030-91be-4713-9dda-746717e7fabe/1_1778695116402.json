@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "ae1aa030-91be-4713-9dda-746717e7fabe",
+  "turn_id": 1,
+  "question_text": "Looking at the three curves on this slide, in the positively-skewed one, which is leftmost: the mode, the mean, or the median?",
+  "answer_text": "Let's recap what we've seen on this slide: we have three types of distributions, symmetrical, positively skewed, and negatively skewed, each with a specific relationship between the mean, median, and mode. Looking at the table on the slide, can you see the relationship for a positively skewed distribution, where it says Mean supérieur à Median supérieur à Mode? Now, considering this relationship, which value do you think would be the leftmost in the positively skewed curve, the mode, the median, or the mean? The slide directly tells us the order of these values, so let's look at that to find our answer.",
+  "language": "en",
+  "subject": "statistics",
+  "chapter_title": "Course 3",
+  "section_title": "Types of distribution",
+  "chapter_index": 3,
+  "section_index": 12,
+  "char_position": 511,
+  "audio_answer_path": "turns/answers/ae1aa030-91be-4713-9dda-746717e7fabe/1_1778695116402.mp3"
+}

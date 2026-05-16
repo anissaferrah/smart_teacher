@@ -841,6 +841,52 @@ class MultiModalRAG:
             )
         return top_results
 
+    def get_slide_neighbors(
+        self,
+        course: str,
+        chapter_idx: int,
+        slide_idx: int,
+        exclude_idea_ids: set[str] | None = None,
+    ) -> list[Document]:
+        """Return chunks one slide before and one slide after the given
+        (course, chapter_idx, slide_idx) — strict N±1. Same-slide siblings
+        are excluded by definition.
+
+        Each result is a fresh Document tagged via
+        metadata["context_type"]="neighbor" so callers can distinguish
+        pedagogical context from query-matched evidence. self.all_docs
+        is never mutated.
+        """
+        if not self.all_docs:
+            return []
+        targets = {slide_idx - 1, slide_idx + 1}
+        exclude = exclude_idea_ids or set()
+        out: list[Document] = []
+        seen_ids: set[str] = set()
+        for cand in self.all_docs:
+            cm = cand.metadata or {}
+            if cm.get("course") != course:
+                continue
+            if cm.get("chapter_idx") != chapter_idx:
+                continue
+            slide_raw = cm.get("slide_idx")
+            if slide_raw is None:
+                continue
+            try:
+                s_int = int(slide_raw)
+            except (TypeError, ValueError):
+                continue
+            if s_int not in targets:
+                continue
+            cid = cm.get("idea_id") or cm.get("content_hash") or ""
+            if cid and (cid in exclude or cid in seen_ids):
+                continue
+            if cid:
+                seen_ids.add(cid)
+            tagged_meta = {**cm, "context_type": "neighbor"}
+            out.append(Document(page_content=cand.page_content, metadata=tagged_meta))
+        return out
+
     def _vector_search(
         self, query: str, k: int,
         chapter_filter: int | None = None,

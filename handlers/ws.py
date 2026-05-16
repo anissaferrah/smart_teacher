@@ -663,185 +663,81 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     except Exception as _exc:
                         log.debug(f"[{session_id[:8]}] vision describe skipped: {_exc}")
 
-                # ── Per-student persistent context ───────────────────
-                # Two adapters that turn this WS connection into a true
-                # "Smart Teacher" with memory + knowledge model :
-                #   1. Load the student's chat history scoped to THIS
-                #      course (Redis-backed, persists across sessions
-                #      and devices). Falls back to the in-memory
-                #      ``history`` on Redis miss / anon students.
-                #   2. Build a knowledge snapshot — what the student
-                #      already mastered, what they're weak on, what
-                #      they've never seen — so the responder can adapt
-                #      tone and depth ("don't redefine X, they know it").
-                # Both are best-effort : a failure here NEVER blocks the
-                # answer flow.
-                # _qa_course_id / _qa_student_id hoisted above the cache-check
-                # so they're available on the cache-hit path too. No reassignment
-                # needed here — the values are the same.
-                persistent_history: list[dict] = []
-                student_snapshot = None
-                try:
-                    from pedagogy.student_history import load_chat_history
-                    persistent_history = await load_chat_history(
-                        student_id=_qa_student_id,
-                        course_id=_qa_course_id,
-                        limit=20,
-                    )
-                    if persistent_history:
-                        log.info(
-                            f"[{session_id[:8]}] 📚 chat history loaded from Redis: "
-                            f"{len(persistent_history)} turns "
-                            f"(student={_qa_student_id[:8] if _qa_student_id else 'anon'}, "
-                            f"course={_qa_course_id or 'none'})"
-                        )
-                    else:
-                        log.info(
-                            f"[{session_id[:8]}] 📚 chat history empty "
-                            f"(student={_qa_student_id[:8] if _qa_student_id else 'anon'}, "
-                            f"course={_qa_course_id or 'none'})"
-                        )
-                except Exception as exc:                                  # noqa: BLE001
-                    log.debug(f"[{session_id[:8]}] persistent history load skipped: {exc}")
-                try:
-                    from pedagogy.student_knowledge import build_snapshot
-                    student_snapshot = await build_snapshot(
-                        student_id=_qa_student_id or None,
-                        course_id=_qa_course_id or None,
-                    )
-                    if student_snapshot and not student_snapshot.is_cold_start:
-                        log.info(
-                            f"[{session_id[:8]}] 🧩 knowledge snapshot | "
-                            f"strong={len(student_snapshot.strong_concepts)} "
-                            f"weak={len(student_snapshot.weak_concepts)} "
-                            f"never_seen={len(student_snapshot.never_seen_concepts)} "
-                            f"confused={len(student_snapshot.recently_confused)} "
-                            f"attempts={student_snapshot.total_attempts}"
-                        )
-                        if student_snapshot.strong_concepts:
-                            log.info(
-                                f"[{session_id[:8]}] 🧩    strong: "
-                                f"{', '.join(student_snapshot.strong_concepts[:5])}"
-                            )
-                        if student_snapshot.weak_concepts:
-                            log.info(
-                                f"[{session_id[:8]}] 🧩    weak: "
-                                f"{', '.join(student_snapshot.weak_concepts[:5])}"
-                            )
-                    elif student_snapshot:
-                        log.info(
-                            f"[{session_id[:8]}] 🧩 knowledge snapshot: cold-start "
-                            f"({student_snapshot.total_attempts} attempts so far)"
-                        )
-                except Exception as exc:                                  # noqa: BLE001
-                    log.debug(f"[{session_id[:8]}] knowledge snapshot skipped: {exc}")
+                # QA Graph orchestration — delegated to the shared runner
+                # so audio questions go through the exact same pipeline.
+                # See agentic/qa/runner.py for the full sequence (loads
+                # persistent history + snapshot, merges with in-memory
+                # history, builds qa_state, streams the graph, extracts
+                # the cleaned answer).
 
-                # Merge histories : the WS-local ``history`` carries
-                # the CURRENT connection's exchanges (most recent), the
-                # persistent history adds prior turns. We dedupe by
-                # ``content`` (last 80 chars) to handle the case where
-                # the persistent store re-loaded a turn that's still
-                # in-memory.
-                merged_history: list[dict] = []
-                seen_contents: set[str] = set()
-                for h in (persistent_history + list(history)):
-                    if not isinstance(h, dict):
-                        continue
-                    fingerprint = (h.get("role", ""), str(h.get("content", ""))[-80:])
-                    if fingerprint in seen_contents:
-                        continue
-                    seen_contents.add(fingerprint)
-                    merged_history.append({
-                        "role":    h.get("role", "user"),
-                        "content": h.get("content", ""),
-                    })
+                # Hook: push intent to the UI as soon as IntentAgent
+                # classifies — preserves the old astream-loop behaviour.
+                async def _push_intent_to_ui(intent_obj):
+                    try:
+                        await send({
+                            "type": "qa_intent",
+                            "session_id": session_id,
+                            "turn_id": turn_id,
+                            "intent_type": getattr(intent_obj, "type", "question"),
+                            "confidence": float(getattr(intent_obj, "confidence", 0.0)),
+                            "source": (getattr(intent_obj, "payload", {}) or {}).get("source", ""),
+                        })
+                        log.info(
+                            f"[{session_id[:8]}] 🎯 Intent envoyé au frontend: "
+                            f"{getattr(intent_obj, 'type', '?')} "
+                            f"(conf={getattr(intent_obj, 'confidence', 0):.2f})"
+                        )
+                    except Exception as exc:                              # noqa: BLE001
+                        log.debug(f"qa_intent send failed: {exc}")
 
-                # Build engagement signals for this turn (read by the
-                # responder via state["engagement"]).
-                engagement_result = None
+                # Engagement computation stays here — needs session-level
+                # counters (questions_in_session, etc.) the runner doesn't have.
+                engagement_dict = None
                 try:
                     from pedagogy.engagement import EngagementSignals, compute_engagement
                     _now = time.time()
-                    engagement_result = compute_engagement(EngagementSignals(
-                        seconds_since_last_interaction=0.0,  # this IS an interaction
+                    _eng = compute_engagement(EngagementSignals(
+                        seconds_since_last_interaction=0.0,
                         questions_in_session=questions_in_session,
                         confusions_in_session=(question_ctx.confusion_count if question_ctx else 0),
                         consecutive_passive_slides=consecutive_passive_slides,
                         last_interrupt_latency_ms=last_interrupt_latency_ms,
                         session_age_s=max(0.0, _now - session_started_at),
                     ))
-                    log.info(f"[{session_id[:8]}] 💡 engagement | {engagement_result.reason}")
-                except Exception as _eng_exc:                                # noqa: BLE001
+                    engagement_dict = {"score": _eng.score, "label": _eng.label}
+                    log.info(f"[{session_id[:8]}] 💡 engagement | {_eng.reason}")
+                except Exception as _eng_exc:                             # noqa: BLE001
                     log.debug(f"[{session_id[:8]}] engagement compute skipped: {_eng_exc}")
 
-                qa_state = {
-                    "session_id": session_id,
-                    "course_id": _qa_course_id,
-                    "student_id": _qa_student_id or None,
-                    "language": lang[:2] if lang else "fr",
-                    "chapter_idx": current_chapter_idx or 0,
-                    "chapter_title": current_chapter_title or "",
-                    "section_idx": section_index_int or 0,
-                    "section_title": current_section_title or "",
-                    "last_slide_content": _last_slide_content,
-                    "history": merged_history,
-                    "student_snapshot": student_snapshot,
-                    "engagement": (
-                        {"score": engagement_result.score, "label": engagement_result.label}
-                        if engagement_result else None
-                    ),
-                    "event_type": "student_speech",
-                    "event_payload": {"text": question_for_llm or content},
-                    "domain": None,
-                    "student_level": (question_ctx.student_level if question_ctx else "lycée"),
-                }
-                # Stream the graph so we can push the intent to the UI as soon as it's classified
-                qa_final = dict(qa_state)
-                async for update_chunk in qa_graph.astream(qa_state, stream_mode="updates"):
-                    if not isinstance(update_chunk, dict):
-                        continue
-                    for node_name, updates in update_chunk.items():
-                        if isinstance(updates, dict):
-                            qa_final.update(updates)
-                        # Push intent to UI as soon as Intent node finishes
-                        if node_name == "intent" and isinstance(updates, dict):
-                            intent_obj = updates.get("intent")
-                            if intent_obj is not None:
-                                try:
-                                    await send({
-                                        "type": "qa_intent",
-                                        "session_id": session_id,
-                                        "turn_id": turn_id,
-                                        "intent_type": getattr(intent_obj, "type", "question"),
-                                        "confidence": float(getattr(intent_obj, "confidence", 0.0)),
-                                        "source": (getattr(intent_obj, "payload", {}) or {}).get("source", ""),
-                                    })
-                                    log.info(
-                                        f"[{session_id[:8]}] 🎯 Intent envoyé au frontend: {getattr(intent_obj, 'type', '?')} "
-                                        f"(conf={getattr(intent_obj, 'confidence', 0):.2f})"
-                                    )
-                                except Exception as exc:
-                                    log.debug(f"qa_intent send failed: {exc}")
-                ai_response_raw = (qa_final.get("answer") or "").strip()
-                log.info(
-                    "[%s] 🧠 Q&A Graph raw answer: %d chars",
-                    session_id[:8], len(ai_response_raw),
+                from agentic.qa.runner import run_qa_graph
+                qa_result = await run_qa_graph(
+                    text=question_for_llm or content,
+                    session_id=session_id,
+                    course_id=_qa_course_id,
+                    student_id=_qa_student_id or None,
+                    language=lang,
+                    chapter_idx=current_chapter_idx,
+                    chapter_title=current_chapter_title or "",
+                    section_idx=section_index_int,
+                    section_title=current_section_title or "",
+                    last_slide_content=_last_slide_content,
+                    history=history,
+                    student_level=(question_ctx.student_level if question_ctx else "lycée"),
+                    qa_graph=qa_graph,
+                    brain=brain,
+                    engagement=engagement_dict,
+                    on_intent_classified=_push_intent_to_ui,
                 )
-                ai_response = brain._clean_for_speech(ai_response_raw)
+                ai_response = qa_result["answer"]
+                llm_confidence = qa_result["confidence"]
+                qa_final = qa_result["qa_final"]
+                qa_intent = qa_result["intent"]
+                qa_timings = qa_result["timings"]
                 log.info(
-                    "[%s] 🧠 Q&A Graph cleaned answer: %d chars",
-                    session_id[:8], len(ai_response),
-                )
-                llm_confidence = float(qa_final.get("confidence", 0.6))
-                qa_intent = qa_final.get("intent")
-                qa_timings = qa_final.get("timings") or {}
-                log.info(
-                    "[%s] 🧠 Q&A Graph done | intent=%s | timings=%s | %d chars | turn=%d active=%d",
-                    session_id[:8],
-                    getattr(qa_intent, "type", "?") if qa_intent else "?",
-                    {k: round(v, 1) for k, v in qa_timings.items()},
-                    len(ai_response),
-                    turn_id, active_text_turn_id,
+                    f"[{session_id[:8]}] 🧠 Q&A Graph done | "
+                    f"intent={getattr(qa_intent, 'type', '?') if qa_intent else '?'} | "
+                    f"timings={ {k: round(v, 1) for k, v in qa_timings.items()} } | "
+                    f"{len(ai_response)} chars | turn={turn_id} active={active_text_turn_id}"
                 )
                 if not ai_response:
                     raise RuntimeError("Q&A Graph returned empty answer")
@@ -2596,6 +2492,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         dialogue=dialogue,
                         csv_logger=csv_logger,
                         stt_logger=stt_logger,
+                        qa_graph=qa_graph,  # ✅ Audio now routes through the QA graph
                     )
 
                     if result.get("no_speech"):

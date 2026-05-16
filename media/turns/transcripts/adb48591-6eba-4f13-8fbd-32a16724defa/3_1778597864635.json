@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "adb48591-6eba-4f13-8fbd-32a16724defa",
+  "turn_id": 3,
+  "question_text": "according to the slides what is the definition of data mining given by IBM",
+  "answer_text": "Data mining is the overall process of discovering patterns and extracting useful insights from large datasets through the use of statistics, mathematics, and machine learning algorithms, essentially making sense of data to drive informed decisions. In simpler words, it's about turning raw data into actionable knowledge. To understand this, you first need to know that data mining acts as a bridge between raw data and actionable knowledge. Concretely, the Data Mining General Process involves several steps including data warehouse, patterns and evaluation, task-relevant data, and more. This process is crucial for making sense of the vast amounts of data available, and it's more than just collecting data. What do you think is the main goal of data mining, and how does it differ from just collecting data?",
+  "language": "en",
+  "subject": "cs",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining General Process",
+  "chapter_index": 1,
+  "section_index": 8,
+  "char_position": 305,
+  "audio_answer_path": "turns/answers/adb48591-6eba-4f13-8fbd-32a16724defa/3_1778597864635.mp3"
+}

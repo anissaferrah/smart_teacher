@@ -433,7 +433,7 @@ function renderSubject(domain, c) {
           course_id: c.id,
           chapter:   String(Math.max(0, (Number(ch.order) || 1) - 1)),
         });
-        window.open(`/static/index.html?${params.toString()}`, '_blank');
+        location.href = `/static/index.html?${params.toString()}`;
       });
       row.appendChild(start);
 

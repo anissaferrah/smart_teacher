@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "54b89e70-9b9f-473c-b676-2065568be2ee",
+  "turn_id": 4,
+  "question_text": "What tables surround the Sales Fact Table in the Star Schema?",
+  "answer_text": "What if you had a big box of sales data, and you wanted to know more about each sale, like when it happened, who made it, and what product was sold? Would you expect to find that information in the same box as the sales data, or in separate boxes that can be connected to the sales data? The tables that surround the Sales Fact Table in the Star Schema are actually dimension tables, such as Date, SalesPerson, Promotion, Customer, and Product, which provide context to the sales data.",
+  "language": "en",
+  "subject": "computer",
+  "chapter_title": "Course 2",
+  "section_title": "Star Schema",
+  "chapter_index": 2,
+  "section_index": 25,
+  "char_position": 0,
+  "audio_answer_path": "turns/answers/54b89e70-9b9f-473c-b676-2065568be2ee/4_1778689893240.mp3"
+}
