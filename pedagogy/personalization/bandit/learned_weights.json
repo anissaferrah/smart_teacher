@@ -1,0 +1,11 @@
+{
+  "W_CONFUSION": 0.0,
+  "W_MASTERY": 1.0,
+  "W_ENGAGEMENT": 0.0,
+  "r2_score": 0.2243,
+  "trained_on_samples": 1920,
+  "trained_on_turns": 2000,
+  "lookahead_h": 20,
+  "target": "mastery_after[t+H] - mastery_before[t]",
+  "note": "Learned via Ridge regression. Predicts H-turn mastery gain from per-turn features."
+}

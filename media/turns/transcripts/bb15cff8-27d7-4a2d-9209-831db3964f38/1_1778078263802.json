@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "bb15cff8-27d7-4a2d-9209-831db3964f38",
+  "turn_id": 1,
+  "question_audio_path": "turns/questions/bb15cff8-27d7-4a2d-9209-831db3964f38/1_1778078263802.webm",
+  "question_text": "So can you give me an example of data types?",
+  "answer_text": "In data mining, we typically work with various types of data, including numerical data, such as integers and floats, categorical data, like text or labels, and temporal data, like dates and times. We also have spatial data, which represents geographic locations, and text data, which can be unstructured or semi-structured, like documents or social media posts. Additionally, we have image and audio data, which are used in applications like computer vision and speech recognition.",
+  "language": "en",
+  "subject": "cs",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 6,
+  "char_position": 215,
+  "audio_answer_path": "turns/answers/bb15cff8-27d7-4a2d-9209-831db3964f38/1_1778078263802.mp3"
+}

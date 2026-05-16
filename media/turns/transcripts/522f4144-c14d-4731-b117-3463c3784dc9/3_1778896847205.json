@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "522f4144-c14d-4731-b117-3463c3784dc9",
+  "turn_id": 3,
+  "question_audio_path": "turns/questions/522f4144-c14d-4731-b117-3463c3784dc9/3_1778896847205.webm",
+  "question_text": "What are the eight factors of this course?",
+  "answer_text": "So, in this Data Mining course, we have eight main topics that we'll be covering, and they're like the building blocks of the whole course. For example, think of it like a puzzle with eight pieces, and each piece is a different topic, like Climate, and when we put them all together, we get a complete picture of Data Mining. So, these eight topics are like the main chapters or sections that we'll be learning about, and they'll help us understand the whole subject of Data Mining.",
+  "language": "en",
+  "subject": "education",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 0,
+  "char_position": 375,
+  "audio_answer_path": "turns/answers/522f4144-c14d-4731-b117-3463c3784dc9/3_1778896847205.mp3"
+}

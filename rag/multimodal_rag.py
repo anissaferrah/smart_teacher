@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -382,6 +383,11 @@ class MultiModalRAG:
             chapter_title = chapter.get("title") or course_data.get("title") or f"Chapter {chapter_idx}"
 
             chapter_sections = chapter.get("sections", []) or []
+            # Pre-fuse dedup : strip identical slides (animation builds,
+            # repeated transition slides) BEFORE merging. Post-merge dedup
+            # can't catch these once they've been mixed with different
+            # neighbors.
+            chapter_sections = self._dedup_sections_pre_fuse(chapter_sections)
             # Page fusion : merge consecutive short sections AVANT idea-chunking
             # (evite 1 appel LLM pour 2 phrases — qualite pedagogique + cout)
             chapter_sections = self._fuse_short_sections(chapter_sections)
@@ -1078,7 +1084,7 @@ class MultiModalRAG:
                 log.info(f"⏳ Loading reranker {Config.RAG_RERANKER_MODEL}…")
                 self._reranker = CrossEncoder(
                     Config.RAG_RERANKER_MODEL,
-                    max_length=2048,
+                    max_length=512,
                     device="cpu",
                 )
                 log.info(f"✅ Reranker {Config.RAG_RERANKER_MODEL} ready")
@@ -2314,7 +2320,7 @@ class MultiModalRAG:
                 summary = summaries_flat[summary_cursor] if summary_cursor < len(summaries_flat) else idea_text
                 summary_cursor += 1
                 lang = self._detect_language(idea_text)
-                content_hash = hashlib.md5(idea_text.encode()).hexdigest()[:8]
+                content_hash = hashlib.md5((summary or idea_text).encode()).hexdigest()[:8]
 
                 doc = Document(
                     page_content=summary or idea_text,
@@ -2438,6 +2444,63 @@ class MultiModalRAG:
                     results[i] = texts[i]
         return results
 
+    def _dedup_sections_pre_fuse(self, sections: list[dict]) -> list[dict]:
+        """Drop duplicate raw slides BEFORE the title-chunk fusion pass.
+
+        Some PDFs repeat the same slide multiple times (animation builds
+        where slides 2, 3, 4 are the same content with progressively
+        revealed bullets). After ``_fuse_short_sections`` merges these
+        with their neighbors, post-merge dedup can no longer catch them
+        because each merged chunk has different neighbors.
+
+        Normalisation strips lines that differ between visually identical
+        slides — lone page numbers (``^\\d{1,3}$``), the running
+        chapter-header pattern (``^\\d+\\.\\s+[A-Z]``), and the literal
+        ``TODO`` placeholder — then NFC-normalises, collapses whitespace,
+        lowercases, and hashes. First occurrence wins.
+        """
+        if not sections:
+            return sections
+
+        def _normalize(text: str) -> str:
+            text = unicodedata.normalize("NFC", text or "")
+            kept_lines = []
+            for ln in text.splitlines():
+                stripped = ln.strip()
+                if re.match(r"^\d{1,3}$", stripped):
+                    continue
+                if re.match(r"^\d+\.\s+[A-Z]", stripped):
+                    continue
+                if stripped.upper() == "TODO":
+                    continue
+                kept_lines.append(ln)
+            text = "\n".join(kept_lines)
+            text = re.sub(r"\s+", " ", text).strip().lower()
+            return text
+
+        seen: set[str] = set()
+        kept: list[dict] = []
+        dropped = 0
+        for sec in sections:
+            content = (sec.get("content") or "").strip()
+            norm = _normalize(content)
+            if not norm:
+                kept.append(sec)
+                continue
+            h = hashlib.md5(norm.encode("utf-8")).hexdigest()
+            if h in seen:
+                dropped += 1
+                continue
+            seen.add(h)
+            kept.append(sec)
+
+        if dropped:
+            log.info(
+                f"🧹 Pre-merge slide dedup: {len(sections)} → {len(kept)} slides "
+                f"({dropped} exact duplicates dropped)"
+            )
+        return kept
+
     def _fuse_short_sections(self, sections: list[dict]) -> list[dict]:
         """Fix #2 — Fusion des sections trop courtes en sections logiques.
 
@@ -2516,11 +2579,77 @@ class MultiModalRAG:
             )
         return fused
 
+    def _dedup_documents(self, documents: list[Document]) -> list[Document]:
+        """Remove exact and near-duplicate chunks before storage.
+
+        Pass 1: exact md5 of NFC-normalized, whitespace-collapsed, lowercased
+        page_content. Pass 2: fuzzy ``SequenceMatcher.ratio() >= 0.95`` with a
+        length-ratio short-circuit (a pair whose shorter/longer ratio is below
+        0.95/1.05 ≈ 0.905 cannot reach 0.95). First occurrence wins.
+        """
+        if not documents:
+            return documents
+
+        def _normalize(text: str) -> str:
+            text = unicodedata.normalize("NFC", text or "")
+            text = re.sub(r"\s+", " ", text).strip().lower()
+            return text
+
+        normalized = [_normalize(d.page_content) for d in documents]
+
+        seen_hashes: set[str] = set()
+        after_exact: list[tuple[Document, str]] = []
+        exact_drops = 0
+        for doc, norm in zip(documents, normalized):
+            if not norm:
+                after_exact.append((doc, norm))
+                continue
+            h = hashlib.md5(norm.encode("utf-8")).hexdigest()
+            if h in seen_hashes:
+                exact_drops += 1
+                continue
+            seen_hashes.add(h)
+            after_exact.append((doc, norm))
+
+        fuzzy_drops = 0
+        kept: list[tuple[Document, str]] = []
+        for doc, norm in after_exact:
+            is_dup = False
+            if norm:
+                n_len = len(norm)
+                for _, kept_norm in kept:
+                    k_len = len(kept_norm)
+                    if k_len == 0:
+                        continue
+                    shorter, longer = (n_len, k_len) if n_len < k_len else (k_len, n_len)
+                    if shorter / longer < 0.905:
+                        continue
+                    if SequenceMatcher(None, norm, kept_norm).ratio() >= 0.95:
+                        is_dup = True
+                        break
+            if is_dup:
+                fuzzy_drops += 1
+            else:
+                kept.append((doc, norm))
+
+        result = [doc for doc, _ in kept]
+
+        if exact_drops or fuzzy_drops:
+            log.info(
+                f"🧹 dedup: {len(documents)} → {len(result)} docs "
+                f"(exact={exact_drops}, fuzzy>=95%={fuzzy_drops})"
+            )
+
+        return result
+
     def _store_documents_once(
         self,
         documents: list[Document],
         full_documents: list[Document] | None = None,
     ) -> bool:
+        documents = self._dedup_documents(documents)
+        if full_documents is not None:
+            full_documents = self._dedup_documents(full_documents)
         documents_to_keep = full_documents if full_documents is not None else documents
 
         try:
@@ -2899,6 +3028,137 @@ class MultiModalRAG:
         self.bm25_retriever = None
         self.all_docs = []
         self.is_ready = False
+
+    def delete_by_course_and_chapter(
+        self,
+        course_id: str,
+        chapter_idx: int | None = None,
+        chapter_title: str | None = None,
+    ) -> int:
+        """Delete chunks for one chapter of one course.
+
+        Matching is strict-AND, not OR — because the ingestion path
+        currently stamps every chapter of a course with the same
+        ``chapter_idx`` (each new upload starts its own ``enumerate``
+        from 1), so an OR over (idx, title) would over-match neighbour
+        chapters whose ``chapter_idx`` happens to coincide.
+
+        Filter logic:
+          - ``course`` payload MUST equal ``course_id``.
+          - If ``chapter_title`` is provided and non-empty, ``chapter_title``
+            payload MUST equal it (this is the load-bearing identifier;
+            the structurer reliably stamps it).
+          - Else if ``chapter_idx`` is provided, ``chapter_idx`` payload
+            MUST equal it (used only when title is missing).
+          - Else: no deletion happens (refuse to wildcard-match within a
+            course; that's what ``delete_by_course_id`` is for).
+
+        Returns the count removed from ``all_docs``. Best-effort: a
+        Qdrant failure does not prevent the in-memory / cache cleanup.
+        """
+        if not course_id:
+            return 0
+        try:
+            chapter_idx_int = int(chapter_idx) if chapter_idx is not None else None
+        except (TypeError, ValueError):
+            chapter_idx_int = None
+        title_norm = (chapter_title or "").strip()
+
+        use_title = bool(title_norm)
+        use_idx = (not use_title) and (chapter_idx_int is not None)
+        if not (use_title or use_idx):
+            log.info(
+                f"delete_by_course_and_chapter: no chapter identifier given for "
+                f"course={course_id} — refusing to delete (use delete_by_course_id "
+                f"for full-course deletion)"
+            )
+            return 0
+
+        # Qdrant filter — strict AND.
+        if self.client and self.client.collection_exists(self.collection_name):
+            must_clauses = [FieldCondition(key="course", match=MatchValue(value=course_id))]
+            if use_title:
+                must_clauses.append(FieldCondition(
+                    key="chapter_title", match=MatchValue(value=title_norm),
+                ))
+            else:
+                must_clauses.append(FieldCondition(
+                    key="chapter_idx", match=MatchValue(value=chapter_idx_int),
+                ))
+            try:
+                self.client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=Filter(must=must_clauses),
+                )
+            except Exception as exc:
+                log.warning(
+                    f"Qdrant delete failed for course={course_id} "
+                    f"chapter_idx={chapter_idx_int} chapter_title={title_norm!r}: {exc}"
+                )
+
+        def _matches(doc) -> bool:
+            meta = doc.metadata or {}
+            if meta.get("course") != course_id:
+                return False
+            if use_title:
+                return (meta.get("chapter_title") or "").strip() == title_norm
+            try:
+                return int(meta.get("chapter_idx")) == chapter_idx_int
+            except (TypeError, ValueError):
+                return False
+
+        before = len(self.all_docs)
+        self.all_docs = [d for d in self.all_docs if not _matches(d)]
+        removed = before - len(self.all_docs)
+
+        self._save_docs_cache()
+
+        if self.all_docs:
+            self._build_hybrid_retriever()
+        else:
+            self.bm25_retriever = None
+
+        log.info(
+            f"🗑️  Deleted {removed} chunks for course={course_id} "
+            f"via {'chapter_title=' + repr(title_norm) if use_title else 'chapter_idx=' + str(chapter_idx_int)}"
+        )
+        return removed
+
+    def delete_by_course_id(self, course_id: str) -> int:
+        """Delete all chunks for a course from Qdrant, in-memory list,
+        docs_cache.json, and rebuild BM25. Returns the count removed
+        from ``all_docs``. Best-effort: a Qdrant failure does not prevent
+        the in-memory / cache cleanup."""
+        if not course_id:
+            return 0
+
+        if self.client and self.client.collection_exists(self.collection_name):
+            try:
+                self.client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=Filter(must=[
+                        FieldCondition(key="course", match=MatchValue(value=course_id))
+                    ]),
+                )
+            except Exception as exc:
+                log.warning(f"Qdrant delete failed for course={course_id}: {exc}")
+
+        before = len(self.all_docs)
+        self.all_docs = [
+            d for d in self.all_docs
+            if (d.metadata or {}).get("course") != course_id
+        ]
+        removed = before - len(self.all_docs)
+
+        self._save_docs_cache()
+
+        if self.all_docs:
+            self._build_hybrid_retriever()
+        else:
+            self.bm25_retriever = None
+
+        log.info(f"🗑️  Deleted {removed} chunks for course={course_id}")
+        return removed
 
     def reset(self) -> None:
         """

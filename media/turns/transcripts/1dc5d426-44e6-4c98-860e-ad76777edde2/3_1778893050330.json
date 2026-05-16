@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "1dc5d426-44e6-4c98-860e-ad76777edde2",
+  "turn_id": 3,
+  "question_audio_path": "turns/questions/1dc5d426-44e6-4c98-860e-ad76777edde2/3_1778893050330.webm",
+  "question_text": "is a key part of the knowledge discovery process.",
+  "answer_text": "Data mining being a key part of the knowledge discovery process means it plays a central role in uncovering hidden patterns and relationships in data, ultimately leading to the extraction of valuable knowledge and insights.",
+  "language": "en",
+  "subject": "cs",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining Introduction",
+  "chapter_index": 0,
+  "section_index": 2,
+  "char_position": 497,
+  "audio_answer_path": "turns/answers/1dc5d426-44e6-4c98-860e-ad76777edde2/3_1778893050330.mp3"
+}

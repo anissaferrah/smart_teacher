@@ -1,0 +1,15 @@
+{
+  "kind": "text_question",
+  "session_id": "005e82f8-a4a9-4e3b-840b-24e84ea478c7",
+  "turn_id": 3,
+  "question_text": "Who is the professor?",
+  "answer_text": "Je n'ai pas pu générer de réponse pour le moment. Réessayez dans un instant.",
+  "language": "en",
+  "subject": "philosophy",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining",
+  "chapter_index": 1,
+  "section_index": 0,
+  "char_position": 506,
+  "audio_answer_path": "turns/answers/005e82f8-a4a9-4e3b-840b-24e84ea478c7/3_1778865360169.mp3"
+}

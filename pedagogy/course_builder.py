@@ -455,6 +455,7 @@ class CourseBuilder:
                         image_path,
                         language,
                         section_title=parent_title,
+                        slide_text=content,
                     )
                 ).strip()
                 if vision_concept:
@@ -490,7 +491,7 @@ class CourseBuilder:
         if content and content.strip():
             try:
                 from services.title_extractor import extract_title_via_llm_async
-                llm_title = (await extract_title_via_llm_async(content, language)).strip()
+                llm_title = (await extract_title_via_llm_async(content, language, chapter_title=parent_title)).strip()
                 if llm_title:
                     log.info(
                         "    ✅ FINAL TITLE (page %d) : %r  [source=llm]",
@@ -973,6 +974,17 @@ Résumé concis:"""
                 f"/media/slides/{domain}/{course_slug}/{chapter_slug}/page_{i+1:03d}.png"
                 for i in range(len(png_paths))
             ]
+
+            # Per-slide visual-content detection. Must run BEFORE vision
+            # title resolution so the gate in extract_slide_concept can
+            # read the cached has_visuals flag and bypass the OCR-based
+            # heuristic on slides whose visuals (diagrams, schemas,
+            # formula-as-image) the text gate can't see.
+            try:
+                from services.pdf_visuals import precompute_slide_visuals
+                precompute_slide_visuals(str(path), [str(p) for p in png_paths])
+            except Exception as exc:                                       # noqa: BLE001
+                log.debug(f"pdf_visuals precompute failed: {exc}")
 
             pages = self._extract_pdf_pages(str(path))
 

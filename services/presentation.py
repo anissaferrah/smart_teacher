@@ -330,9 +330,9 @@ def decide_narration_cache_reuse(
         # audio plays → it looks like the slide was skipped.
         end_threshold = int(len(snapshot_text) * 0.95)
         revisit_completed = (
-            paused_cursor is None
-            and len(snapshot_text) > 0
+            len(snapshot_text) > 0
             and snap_cursor >= end_threshold
+            and (paused_cursor is None or paused_cursor >= end_threshold)
         )
         if revisit_completed:
             log.info(

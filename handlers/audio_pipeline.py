@@ -38,6 +38,7 @@ async def run_pipeline_streaming(
     force_language: str = None,
     course_id: str | None = None,
     ctx=None,
+    slide_context: str = None,
     # Injected dependencies
     transcriber=None,
     rag=None,
@@ -67,6 +68,7 @@ async def run_pipeline_streaming(
         transcriber.transcribe,
         audio_data,
         force_language,
+        slide_context,
     )
     log.info(
         f"[{session_id[:8]}] 🎤 STT DONE | took={time.time()-stt_t0:.2f}s | "
@@ -371,6 +373,7 @@ async def run_pipeline(
     history: list,
     force_language: str = None,
     course_id: str | None = None,
+    slide_context: str = None,
     # Injected dependencies
     transcriber=None,
     rag=None,
@@ -389,6 +392,7 @@ async def run_pipeline(
         transcriber.transcribe,
         audio_data,
         force_language,
+        slide_context,
     )
     if not text or len(text.strip()) <= 2:
         return {"no_speech": True, "message": "Aucune voix détectée"}

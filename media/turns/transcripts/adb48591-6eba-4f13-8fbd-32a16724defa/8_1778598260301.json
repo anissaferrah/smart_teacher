@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "adb48591-6eba-4f13-8fbd-32a16724defa",
+  "turn_id": 8,
+  "question_audio_path": "turns/questions/adb48591-6eba-4f13-8fbd-32a16724defa/8_1778598260301.webm",
+  "question_text": "lights at 1.26, 2012, and a timeline of 8 light, the content of the work.",
+  "answer_text": "This topic is not covered in the course material I have access to.",
+  "language": "en",
+  "subject": "art",
+  "chapter_title": "Course 1",
+  "section_title": "Data Mining General Process",
+  "chapter_index": 0,
+  "section_index": 8,
+  "char_position": 106,
+  "audio_answer_path": "turns/answers/adb48591-6eba-4f13-8fbd-32a16724defa/8_1778598260301.mp3"
+}

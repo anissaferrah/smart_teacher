@@ -256,12 +256,22 @@ class Transcriber:
         language, language_prob = self._detect_language_from_text(text, fallback_language="unknown")
         return text.strip(), language, language_prob
 
-    def transcribe(self, audio: np.ndarray, force_language: str = None) -> tuple[str, float, str, float, float]:
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        force_language: str = None,
+        slide_context: str = None,
+    ) -> tuple[str, float, str, float, float]:
         """Transcribe audio array to text. Returns: (text, stt_time, language, lang_prob, audio_duration)
-        
+
         Args:
             audio: Audio samples
             force_language: If set (e.g. 'en', 'fr'), use this instead of auto-detection
+            slide_context: Optional text passed to Whisper as ``initial_prompt`` to
+                bias decoding toward the lecture's vocabulary (chapter + section
+                title + first 200 chars of the live narration). Capped upstream
+                to ~300 chars to stay safely under Whisper's 224-token prompt
+                limit. ``None`` or empty → Whisper runs unprompted.
         """
         start = time.time()
         log.info(f"🎤 STT START: len={len(audio)} samples, force_lang={force_language}")
@@ -299,7 +309,10 @@ class Transcriber:
                     self._transcribe_with_whisperlivekit(audio, force_language=force_language)
                 )
             else:
-                log.info(f"   → Calling Whisper.transcribe(vad_filter=False, language={force_language})")
+                log.info(
+                    f"   → Calling Whisper.transcribe(vad_filter=False, language={force_language}, "
+                    f"initial_prompt={'<set>' if slide_context else '<none>'})"
+                )
                 segments, info = self.model.transcribe(
                     audio,
                     language=force_language,          # ← Peut être force 'en', 'fr' si besoin
@@ -317,6 +330,7 @@ class Transcriber:
                     condition_on_previous_text=False, # pas de mémoire → évite hallucinations
                     without_timestamps=True,
                     word_timestamps=False,
+                    initial_prompt=slide_context if slide_context else None,
                 )
 
                 # ⚠️  CRITICAL: segments is a GENERATOR, convert to list immediately!

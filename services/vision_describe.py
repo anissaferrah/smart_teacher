@@ -12,14 +12,28 @@ graph, giving the tutor the context it needs to discuss the picture.
 
 # Provider chain
 
-Three layers tried in order; whichever returns first wins:
+Layers tried in order; whichever returns first wins:
 
   1. OpenAI gpt-4o-mini      — fast (~1-2s), cheap (~$0.0002/slide), best
                                 quality. Fails on quota exhaustion.
-  2. Ollama LLaVA / vision   — local, free, slow on CPU (~30-60s/slide).
+  2. Google Gemini 1.5 Flash — free tier (~15 RPM), fast (~1-2s), good
+                                quality. Configurable via GEMINI_VISION_MODEL.
+                                Handles 429s with exponential backoff
+                                (2s → 4s → 8s, 3 retries max).
+  3. Ollama LLaVA / vision   — local, free, slow on CPU (~30-60s/slide).
                                 Configurable via OLLAMA_VISION_MODEL.
-  3. Skip                    — return "" silently. Pipeline keeps working
+  4. Skip                    — return "" silently. Pipeline keeps working
                                 without the visual layer.
+
+# Content gate
+
+Before entering the provider chain, ``should_describe_slide(content)``
+inspects the slide's extracted text. If it has no math symbols, no
+formula markers, no visual-content keywords, isn't sparse, and lacks
+high symbol density, the call is short-circuited — text-only slides
+(bullet lists, definitions) don't need a vision pass because OCR
+already captured everything. Callers opt in by passing ``slide_text``;
+``force=True`` bypasses the gate.
 
 # Caching
 
@@ -58,6 +72,8 @@ import base64
 import hashlib
 import logging
 import os
+import re
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -92,8 +108,10 @@ _TEXT_ONLY_MARKERS = {"text_only", "texte_seul", "(text_only)", "(texte_seul)"}
 _stats: dict[str, int] = {
     "hits":        0,
     "openai_ok":   0,
+    "gemini_ok":   0,
     "ollama_ok":   0,
     "skipped":     0,
+    "gated_skip":  0,
     "errors":      0,
     "text_only":   0,
 }
@@ -177,6 +195,109 @@ def _is_text_only_marker(s: str) -> bool:
     return s.strip().lower() in _TEXT_ONLY_MARKERS
 
 
+# ── Content-gate heuristic ────────────────────────────────────────────
+
+# Visual-content keywords. Presence in slide content or title is a
+# strong signal that the slide has non-text visual elements worth a
+# vision pass. Lowercase, matched as substrings.
+_VISUAL_KEYWORDS_EN: frozenset[str] = frozenset({
+    "schema", "diagram", "architecture", "chart", "graph", "figure",
+    "table", "tree", "timeline", "pyramid", "flowchart", "topology",
+    "matrix", "venn", "scatter", "histogram", "plot", "axis",
+    "snowflake", "star schema", "galaxy", "olap", "cube",
+    # Added after Chapter 1.pdf re-ingest revealed false negatives:
+    # ETL/process pipelines (p.9), Business Intelligence pyramid (p.11),
+    # nested AI-vs-DataMining circles (p.14-15). " vs " padded so it
+    # matches "AI vs Data Mining" but not word-final "vs" runs.
+    "pipeline", "process", "intelligence", " vs ",
+})
+_VISUAL_KEYWORDS_FR: frozenset[str] = frozenset({
+    "schéma", "tableau", "graphique", "diagramme", "figure",
+    "arbre", "pyramide", "histogramme",
+})
+_VISUAL_KEYWORDS: frozenset[str] = _VISUAL_KEYWORDS_EN | _VISUAL_KEYWORDS_FR
+
+# Math glyphs that OCR can detect but text alone can't reason about.
+# Presence implies a formula on the slide.
+_MATH_SYMBOLS: str = "∑∏∫√∂∇≤≥≠≈±×÷πθλμσφϕαβγδ"
+
+# Substrings the ingester leaves behind when it recognized a formula
+# (pix2tex output or LaTeX-style notation in the source text).
+_FORMULA_MARKERS: tuple[str, ...] = ("[formula:", "\\frac", "_{", "^{")
+
+# Year-like numbers (1900-2099). 5+ matches in a single slide is a
+# strong timeline signal — chronology decks render dates as labels
+# around a horizontal axis, and the OCR captures the years without
+# any of the visual keywords being present in the text.
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def should_describe_slide(content: str, title: str = "") -> tuple[bool, str]:
+    """Decide whether a slide warrants a vision API call.
+
+    Returns ``(needs_vision, reason)``. Reason is a short tag for logs;
+    callers should treat the boolean as the authoritative answer.
+
+    Signals (any one fires → needs_vision=True):
+      1. Math symbols in content (∑, ∏, ∫, √, π, …)
+      2. Formula markers ([FORMULA:, \\frac, _{...}, ^{...})
+      3. Visual-content keyword in title or content (schema, diagram,
+         table, chart, figure, etc. + French equivalents)
+      4. Sparse text (word count < 30) — short content almost always
+         means the slide is image-driven
+      5. High symbol density (>35% of chars are non-alphabetic and
+         non-whitespace) — typical of tables, formulas, code blocks
+
+    No-signal slides are skipped: bullet lists, definitions, prose.
+    """
+    if not content:
+        # No content at all → can't gate. Be conservative: needs vision.
+        return True, "no_content"
+
+    # 1. Math symbols
+    if any(c in content for c in _MATH_SYMBOLS):
+        return True, "math_symbols"
+
+    # 2. Formula markers (case-insensitive for [FORMULA:])
+    lower = content.lower()
+    if any(m in lower for m in _FORMULA_MARKERS):
+        return True, "formula_marker"
+
+    # 3. Visual-content keywords (title + content, case-insensitive,
+    #    substring match — catches "data warehouse schema", "tree-like
+    #    structure", etc.)
+    haystack = ((title or "") + " " + content).lower()
+    for kw in _VISUAL_KEYWORDS:
+        if kw in haystack:
+            return True, f"visual_keyword:{kw}"
+
+    # 4. Sparse text (image-driven slide). Threshold tuned for academic
+    #    decks where diagrams have many label fragments — a timeline
+    #    or nested-circles slide can extract 30-45 words of pure
+    #    labels and look "dense" textually while being entirely a
+    #    visual artifact.
+    word_count = len(content.split())
+    if word_count < 50:
+        return True, f"sparse_text(words={word_count})"
+
+    # 5. High symbol density (table or formula heavy)
+    non_alpha_non_ws = sum(
+        1 for c in content if not c.isalpha() and not c.isspace()
+    )
+    density = non_alpha_non_ws / max(len(content), 1)
+    if density > 0.35:
+        return True, f"symbol_density({density:.0%})"
+
+    # 6. Year-density — 5+ year-like numbers (1900-2099) almost always
+    #    mean a chronology/timeline. Catches decks whose timeline slides
+    #    contain no visual keyword but list 8-15 dates as labels.
+    year_hits = len(_YEAR_RE.findall(content))
+    if year_hits >= 5:
+        return True, f"year_density({year_hits})"
+
+    return False, "text_only"
+
+
 def _read_image_b64(image_path: str) -> tuple[str, str]:
     """Return (b64, mime). Raises on read failure."""
     with open(image_path, "rb") as f:
@@ -234,7 +355,175 @@ def _try_openai(image_path: str, lang: str) -> Optional[str]:
         return None
 
 
-# ── Provider 2: Ollama LLaVA / Llama-3.2-Vision ────────────────────────
+# ── Provider 1b: Groq (multimodal Llama 4 Scout, OpenAI-compatible) ───
+
+def _try_groq(image_path: str, lang: str) -> Optional[str]:
+    """Returns the description, or None if disabled / key-missing / failed."""
+    if getattr(Config, "DISABLE_GROQ_VISION", False):
+        return None
+    api_key = os.getenv("GROQ_API_KEY") or getattr(Config, "GROQ_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return None
+    try:
+        img_b64, mime = _read_image_b64(image_path)
+        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        resp = client.chat.completions.create(
+            model=Config.GROQ_VISION_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _build_prompt(lang)},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                ],
+            }],
+            max_tokens=200,
+            temperature=0.0,
+        )
+        description = (resp.choices[0].message.content or "").strip()
+        if not description:
+            return None
+        if _is_text_only_marker(description):
+            _stats["text_only"] += 1
+            return ""
+        _stats.setdefault("groq_ok", 0)
+        _stats["groq_ok"] += 1
+        log.info("🔭 Groq vision OK (%d chars)", len(description))
+        return description
+    except Exception as exc:                                              # noqa: BLE001
+        log.info("🔭 Groq vision failed: %s", str(exc)[:160])
+        return None
+
+
+# ── Provider 2: Google Gemini (free tier, REST) ────────────────────────
+
+# Module-level circuit breaker. Set to True after _gemini_post exhausts
+# its retry budget on a 429 — at that point we've hit the quota window
+# (typically per-minute or per-day RPD) and continuing to call Gemini
+# wastes ~14s per slide on retries that will keep failing until the
+# window resets. While the flag is set, _gemini_post returns None
+# immediately so the orchestrator falls straight to Ollama / structural.
+# The flag resets on process restart; no time-based reopen because
+# Gemini's quota windows aren't observable from our side.
+_gemini_quota_exhausted: bool = False
+
+
+def _gemini_post(payload: dict) -> Optional[dict]:
+    """POST to Gemini generateContent with exponential backoff on 429.
+
+    Backoff schedule: 2s → 4s → 8s (3 retries max, 4 attempts total).
+    Returns the parsed JSON dict on 200, or None on any other status,
+    transport error, or after retries are exhausted. The 429 path is
+    the only one that triggers a retry — other errors fall through
+    immediately so the orchestrator tries the next provider.
+
+    Trips the module-level ``_gemini_quota_exhausted`` breaker when
+    all retries fail on a 429, so subsequent calls in the same process
+    skip Gemini entirely until restart.
+    """
+    global _gemini_quota_exhausted
+    if _gemini_quota_exhausted:
+        return None
+    try:
+        import requests
+    except ImportError:
+        return None
+    api_key = os.getenv("GEMINI_API_KEY") or getattr(Config, "GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+    model = Config.GEMINI_VISION_MODEL
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{model}:generateContent?key={api_key}"
+    )
+    delay = 2.0
+    last_status: Optional[int] = None
+    for attempt in range(4):                # 1 initial + up to 3 retries
+        try:
+            resp = requests.post(url, json=payload, timeout=60)
+            last_status = resp.status_code
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 429 and attempt < 3:
+                log.info(
+                    "🔭 Gemini 429 rate-limit (attempt %d/4) — backing off %.0fs",
+                    attempt + 1, delay,
+                )
+                time.sleep(delay)
+                delay *= 2
+                continue
+            # Promoted from DEBUG → INFO. Without this visibility, model
+            # deprecations (404 on retired model names) and auth errors
+            # (401/403) look like silent provider-chain fallthroughs to
+            # whatever runs next.
+            log.info(
+                "🔭 Gemini HTTP %d (model=%s): %s",
+                resp.status_code, model, resp.text[:200],
+            )
+            break
+        except Exception as exc:                                          # noqa: BLE001
+            log.info("🔭 Gemini POST failed (model=%s): %s", model, exc)
+            return None
+    # Trip the circuit breaker if we exhausted retries on a 429.
+    if last_status == 429:
+        _gemini_quota_exhausted = True
+        log.warning(
+            "🔭 Gemini quota exhausted (model=%s) — disabling Gemini for the "
+            "rest of this process. Restart to re-enable after quota resets.",
+            model,
+        )
+    return None
+
+
+def _try_gemini(image_path: str, lang: str) -> Optional[str]:
+    """Returns the description, or None if disabled / key-missing / failed."""
+    if getattr(Config, "DISABLE_GEMINI", False):
+        log.debug("vision describe : DISABLE_GEMINI=true → skip Gemini provider")
+        return None
+    api_key = os.getenv("GEMINI_API_KEY") or getattr(Config, "GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        img_b64, mime = _read_image_b64(image_path)
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": _build_prompt(lang)},
+                    {"inline_data": {"mime_type": mime, "data": img_b64}},
+                ],
+            }],
+            "generationConfig": {
+                "temperature": 0.0,
+                "maxOutputTokens": 200,
+            },
+        }
+        data = _gemini_post(payload)
+        if not data:
+            return None
+        try:
+            description = (
+                data["candidates"][0]["content"]["parts"][0]["text"] or ""
+            ).strip()
+        except (KeyError, IndexError, TypeError):
+            log.debug("Gemini response shape unexpected: %s", str(data)[:200])
+            return None
+        if not description:
+            return None
+        if _is_text_only_marker(description):
+            _stats["text_only"] += 1
+            return ""
+        _stats["gemini_ok"] += 1
+        log.info("🔭 Gemini vision OK (%d chars)", len(description))
+        return description
+    except Exception as exc:                                              # noqa: BLE001
+        log.debug("Gemini vision failed: %s", exc)
+        return None
+
+
+# ── Provider 3: Ollama LLaVA / Llama-3.2-Vision ────────────────────────
 
 def _try_ollama(image_path: str, lang: str) -> Optional[str]:
     """Returns the description, or None if Ollama unreachable / model missing."""
@@ -279,13 +568,23 @@ def _try_ollama(image_path: str, lang: str) -> Optional[str]:
 
 # ── Public API ────────────────────────────────────────────────────────
 
-async def describe_slide_image(image_path: str | None, lang: str = "en") -> str:
+async def describe_slide_image(
+    image_path: str | None,
+    lang: str = "en",
+    slide_text: str = "",
+    slide_title: str = "",
+    force: bool = False,
+) -> str:
     """Resolve a 2-4 sentence visual description for a slide PNG.
 
     Returns ``""`` when no provider produced a description (or the slide is
     deemed text-only). Always non-blocking on the cache hit path; on a
     miss, runs blocking provider calls in a thread executor so the event
     loop stays free.
+
+    When ``slide_text`` is provided and ``Config.VISION_GATE_ENABLED`` is
+    true (default), the content gate runs first and short-circuits to
+    ``""`` for text-only slides. Pass ``force=True`` to bypass the gate.
     """
     if not Config.VISION_DESCRIBE_ENABLED:
         _stats["skipped"] += 1
@@ -309,11 +608,38 @@ async def describe_slide_image(image_path: str | None, lang: str = "en") -> str:
         log.debug("md5 failed: %s", exc)
         return ""
 
-    # Disk cache hit — fastest path
+    # Disk cache hit — fastest path. Done before the gate so cached
+    # results are returned even on slides the gate would now reject.
     cached = _cache_read(md5, lang2)
     if cached is not None:
         _stats["hits"] += 1
         return cached
+
+    # Content gate — skip vision on slides whose extracted text already
+    # captures everything. Saves real API spend on text-heavy decks.
+    # Bypassed when the PDF-side detector (services.pdf_visuals) flagged
+    # this slide as having visual content the OCR text doesn't expose
+    # (formulas-as-images, charts, schemas).
+    if (
+        getattr(Config, "VISION_GATE_ENABLED", True)
+        and slide_text
+        and not force
+    ):
+        pdf_says_visual: Optional[bool] = None
+        try:
+            from services.pdf_visuals import read_visuals_flag
+            pdf_says_visual = read_visuals_flag(md5)
+        except Exception:                                               # noqa: BLE001
+            pdf_says_visual = None
+
+        if pdf_says_visual is True:
+            log.info("🔭 vision gate: bypass (pdf_visuals=True)")
+        else:
+            needs, reason = should_describe_slide(slide_text, title=slide_title)
+            if not needs:
+                _stats["gated_skip"] += 1
+                log.info("🔭 vision gate: skip describe — %s", reason)
+                return ""
 
     # Single-flight registration
     fut: Optional[asyncio.Future] = None
@@ -338,6 +664,10 @@ async def describe_slide_image(image_path: str | None, lang: str = "en") -> str:
     description = ""
     try:
         description = await asyncio.to_thread(_try_openai, candidate, lang2) or ""
+        if not description:
+            description = await asyncio.to_thread(_try_groq, candidate, lang2) or ""
+        if not description:
+            description = await asyncio.to_thread(_try_gemini, candidate, lang2) or ""
         if not description:
             description = await asyncio.to_thread(_try_ollama, candidate, lang2) or ""
         if not description:
@@ -602,6 +932,98 @@ def _try_openai_concept(
         return None
 
 
+def _try_groq_concept(
+    image_path: str,
+    lang: str,
+    section_title: str = "",
+    chapter_title: str = "",
+) -> Optional[str]:
+    if getattr(Config, "DISABLE_GROQ_VISION", False):
+        log.info("🎯 Groq concept skip: DISABLE_GROQ_VISION=true")
+        return None
+    api_key = os.getenv("GROQ_API_KEY") or getattr(Config, "GROQ_API_KEY", "")
+    if not api_key:
+        log.info("🎯 Groq concept skip: no API key configured")
+        return None
+    try:
+        from openai import OpenAI
+    except ImportError:
+        log.info("🎯 Groq concept skip: openai package not installed")
+        return None
+    try:
+        img_b64, mime = _read_image_b64(image_path)
+        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        resp = client.chat.completions.create(
+            model=Config.GROQ_VISION_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _build_concept_prompt(lang, section_title, chapter_title)},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                ],
+            }],
+            max_tokens=30,
+            temperature=0.0,
+        )
+        out = _normalise_concept((resp.choices[0].message.content or ""))
+        if not out or _is_unknown_marker(out):
+            log.info("🎯 Groq returned UNKNOWN/empty for %s", Path(image_path).name)
+            return ""
+        log.info("🎯 Concept (Groq vision): %r", out[:40])
+        return out
+    except Exception as exc:                                                # noqa: BLE001
+        log.info("🎯 Groq concept failed: %s", str(exc)[:160])
+        return None
+
+
+def _try_gemini_concept(
+    image_path: str,
+    lang: str,
+    section_title: str = "",
+    chapter_title: str = "",
+) -> Optional[str]:
+    if getattr(Config, "DISABLE_GEMINI", False):
+        log.info("🎯 Gemini concept skip: DISABLE_GEMINI=true")
+        return None
+    api_key = os.getenv("GEMINI_API_KEY") or getattr(Config, "GEMINI_API_KEY", "")
+    if not api_key:
+        log.info("🎯 Gemini concept skip: no API key configured")
+        return None
+    try:
+        img_b64, mime = _read_image_b64(image_path)
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": _build_concept_prompt(lang, section_title, chapter_title)},
+                    {"inline_data": {"mime_type": mime, "data": img_b64}},
+                ],
+            }],
+            "generationConfig": {
+                "temperature": 0.0,
+                "maxOutputTokens": 30,
+            },
+        }
+        data = _gemini_post(payload)
+        if not data:
+            return None
+        try:
+            text = (
+                data["candidates"][0]["content"]["parts"][0]["text"] or ""
+            ).strip()
+        except (KeyError, IndexError, TypeError):
+            log.info("🎯 Gemini response shape unexpected for %s", Path(image_path).name)
+            return None
+        out = _normalise_concept(text)
+        if not out or _is_unknown_marker(out):
+            log.info("🎯 Gemini returned UNKNOWN/empty for %s", Path(image_path).name)
+            return ""
+        log.info("🎯 Concept (Gemini vision): %r", out[:40])
+        return out
+    except Exception as exc:                                                # noqa: BLE001
+        log.info("🎯 Gemini concept failed: %s", str(exc)[:160])
+        return None
+
+
 def _try_ollama_concept(
     image_path: str,
     lang: str,
@@ -672,6 +1094,8 @@ async def extract_slide_concept(
     lang: str = "en",
     section_title: str = "",
     chapter_title: str = "",
+    slide_text: str = "",
+    force: bool = False,
 ) -> str:
     """Ask a vision LLM to identify the slide's specific topic.
 
@@ -726,6 +1150,31 @@ async def extract_slide_concept(
         _stats["hits"] += 1
         return cached
 
+    # Content gate — skip vision when OCR text already covers the slide.
+    # Bypassed when the PDF-side detector (services.pdf_visuals) flagged
+    # this slide as having visual content the OCR text doesn't expose
+    # (formulas-as-images, charts, schemas).
+    if (
+        getattr(Config, "VISION_GATE_ENABLED", True)
+        and slide_text
+        and not force
+    ):
+        pdf_says_visual: Optional[bool] = None
+        try:
+            from services.pdf_visuals import read_visuals_flag
+            pdf_says_visual = read_visuals_flag(md5)
+        except Exception:                                                   # noqa: BLE001
+            pdf_says_visual = None
+
+        if pdf_says_visual is True:
+            log.info("🎯 vision gate: bypass (pdf_visuals=True)")
+        else:
+            needs, reason = should_describe_slide(slide_text, title=section_title)
+            if not needs:
+                _stats["gated_skip"] += 1
+                log.info("🎯 vision gate: skip concept — %s", reason)
+                return ""
+
     # Single-flight on the concept namespace (separate from the description
     # namespace — same image can have both calls in parallel without
     # blocking each other).
@@ -752,6 +1201,14 @@ async def extract_slide_concept(
         concept = await asyncio.to_thread(
             _try_openai_concept, candidate, lang2, section_title, chapter_title,
         ) or ""
+        if not concept:
+            concept = await asyncio.to_thread(
+                _try_groq_concept, candidate, lang2, section_title, chapter_title,
+            ) or ""
+        if not concept:
+            concept = await asyncio.to_thread(
+                _try_gemini_concept, candidate, lang2, section_title, chapter_title,
+            ) or ""
         if not concept:
             concept = await asyncio.to_thread(
                 _try_ollama_concept, candidate, lang2, section_title, chapter_title,

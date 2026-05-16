@@ -28,25 +28,26 @@ from __future__ import annotations
 CROSSLANG_RULE_EN = (
     "CROSS-LANGUAGE RULE: If the source material is in a different "
     "language than the language you are answering in, parse the source "
-    "naturally (technical content is universal) but respond in the "
-    "requested language. For each key technical term, keep the ORIGINAL "
-    "spelling from the source in parentheses on first mention so the "
-    "student can map your spoken word to the source. Example: "
-    "'supervised learning (apprentissage supervisé)' or 'embedding "
-    "(représentation vectorielle)'. Do not translate proper nouns, "
-    "acronyms, or formula symbols."
+    "naturally (technical content is universal) and respond ONLY in the "
+    "requested language. Do NOT insert source-language equivalents in "
+    "parentheses by default — translate terms inline and move on. "
+    "Only provide the source-language wording in parentheses if the "
+    "student explicitly asks for it (e.g. 'what's the French term?', "
+    "'how is it written on the slide?'). Proper nouns, acronyms, and "
+    "formula symbols are never translated."
 )
 
 CROSSLANG_RULE_FR = (
     "RÈGLE CROSS-LANGUE : Si le matériel source est dans une langue "
     "différente de celle dans laquelle tu réponds, comprends la source "
-    "naturellement (le contenu technique est universel) puis réponds "
-    "dans la langue demandée. Pour chaque terme technique clé, conserve "
-    "l'ÉCRITURE ORIGINALE de la source entre parenthèses à la première "
-    "mention pour que l'étudiant fasse le lien entre ce qu'il entend et "
-    "ce qu'il voit. Exemple : 'apprentissage supervisé (supervised "
-    "learning)' ou 'embedding (représentation vectorielle)'. Ne traduis "
-    "pas les noms propres, acronymes ou symboles de formules."
+    "naturellement (le contenu technique est universel) et réponds "
+    "UNIQUEMENT dans la langue demandée. N'insère PAS l'équivalent en "
+    "langue source entre parenthèses par défaut — traduis les termes "
+    "directement et continue. Ne fournis le terme en langue source "
+    "entre parenthèses que si l'étudiant le demande explicitement "
+    "(ex : « quel est le terme anglais ? », « comment c'est écrit sur "
+    "la slide ? »). Les noms propres, acronymes et symboles de formule "
+    "ne se traduisent jamais."
 )
 
 

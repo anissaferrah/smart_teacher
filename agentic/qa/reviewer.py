@@ -181,6 +181,56 @@ def _question_text(state: TutorState) -> str:
     return ""
 
 
+# ── Smart gate: skip the LLM reviewer on well-grounded answers ────────
+# The responder's own guardrail at responder.py:435 rejects answers
+# below GROUNDING_OVERLAP_THRESHOLD (0.12). Anything reaching this
+# reviewer is therefore at least weakly grounded. When overlap is also
+# >= _STRONG_OVERLAP_GATE the answer is solidly anchored on the source
+# and a second LLM pass adds latency + 25% TPM consumption + risk of
+# false-positive rejection (observed: reviewer claimed "statistics +
+# math + ML algorithms" was outside the material when the chunk
+# literally contained those words). The middle band [0.12, _STRONG_
+# OVERLAP_GATE) still gets the full LLM review for borderline cases.
+_STRONG_OVERLAP_GATE: float = 0.30
+_MIN_CONTENT_WORD_LEN: int = 4   # Mirrors responder._MIN_CONTENT_WORD_LEN
+
+
+def _content_words_for_overlap(text: str) -> set[str]:
+    """Tokenise + lowercase + accent-fold + drop short tokens.
+
+    Local copy of responder._content_words so the reviewer can compute
+    overlap without a cross-module import. Identical formula.
+    """
+    if not text:
+        return set()
+    import re
+    import unicodedata
+    nfd = unicodedata.normalize("NFD", text)
+    folded = "".join(c for c in nfd if not unicodedata.combining(c)).lower()
+    tokens = re.split(r"\W+", folded)
+    return {t for t in tokens if len(t) >= _MIN_CONTENT_WORD_LEN}
+
+
+def _compute_overlap(answer: str, slide: str, chunks: list) -> float:
+    """Fraction of answer's content words found in slide ∪ chunks.
+
+    Same formula as the responder's guardrail (responder.py:435), kept
+    local so the gate is self-contained. Returns 0.0 on either side
+    being empty (don't gate when there's nothing to measure).
+    """
+    answer_words = _content_words_for_overlap(answer)
+    if not answer_words:
+        return 0.0
+    parts = [slide or ""]
+    for ch in chunks or []:
+        if isinstance(ch, dict):
+            parts.append(str(ch.get("content", "") or ""))
+    source_words = _content_words_for_overlap(" ".join(parts))
+    if not source_words:
+        return 0.0
+    return len(answer_words & source_words) / len(answer_words)
+
+
 class QAReviewAgent:
     """Verifies that the Responder's answer is grounded, course-bound, and coherent."""
 
@@ -226,6 +276,22 @@ class QAReviewAgent:
         if not slide and not chunks:
             return {
                 "review": ReviewResult(grounded=True, score=1.0, feedback="no source to verify"),
+                "timings": {**state.get("timings", {}), "qa_review": round(time.time() - start, 3)},
+            }
+
+        # Smart gate: skip the LLM call when overlap shows strong grounding.
+        # See _STRONG_OVERLAP_GATE comment above for rationale.
+        overlap = _compute_overlap(answer, slide, chunks)
+        if overlap >= _STRONG_OVERLAP_GATE:
+            log.info(
+                "qa_review: smart gate skip — overlap=%.2f >= %.2f (strong grounding, no LLM call)",
+                overlap, _STRONG_OVERLAP_GATE,
+            )
+            return {
+                "review": ReviewResult(
+                    grounded=True, score=overlap,
+                    feedback=f"skipped: strong overlap {overlap:.2f}",
+                ),
                 "timings": {**state.get("timings", {}), "qa_review": round(time.time() - start, 3)},
             }
 

@@ -1,6 +1,7 @@
 """Course endpoints — build, list, structure, concept-graph, assets."""
 
 import logging
+import shutil
 import tempfile
 import uuid
 import uuid as _uuid
@@ -142,7 +143,7 @@ async def build_course(
             target_dir = Path("media/courses") / target_domain / target_course / target_chapter
             target_dir.mkdir(parents=True, exist_ok=True)
             dest = target_dir / upload_filename
-            temp_path.replace(dest)
+            shutil.move(str(temp_path), str(dest))
 
             log.info(f"📁 Course file saved : {dest}")
 
@@ -446,7 +447,7 @@ async def delete_course(course_id: str):
             elif getattr(rag, "all_docs", None):
                 rag.all_docs = [
                     d for d in rag.all_docs
-                    if (d.metadata or {}).get("course_id") != course_id
+                    if (d.metadata or {}).get("course") != course_id
                 ]
         except Exception as exc:    # noqa: BLE001
             log.warning("RAG cleanup failed for %s : %s", course_id, exc)
@@ -456,6 +457,102 @@ async def delete_course(course_id: str):
         raise
     except Exception as exc:
         log.exception("course delete failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── /course/{course_id}/chapter/{chapter_id} delete ──────────────────
+
+@router.delete("/course/{course_id}/chapter/{chapter_id}")
+async def delete_chapter(course_id: str, chapter_id: str):
+    """Delete a single chapter (its sections cascade via FK).
+
+    Also clears the chapter's chunks from Qdrant (filtered by
+    ``course`` + ``chapter_idx``) and the RAG in-memory cache.
+    RAG-side cleanup is best-effort: the DB row is gone first, so a
+    Qdrant failure only leaves stale chunks until the next full reset.
+
+    The chapter must belong to the given course — cross-course
+    deletion via URL forgery returns 404.
+    """
+    import uuid as _uuid_mod
+    from sqlalchemy import select
+    from database.init_db import AsyncSessionLocal
+    from database.models import Chapter
+
+    try:
+        cid = _uuid_mod.UUID(course_id)
+        chid = _uuid_mod.UUID(chapter_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="invalid UUID(s)")
+
+    rag = deps.get_rag()
+    try:
+        async with AsyncSessionLocal() as db:
+            chapter = (await db.execute(
+                select(Chapter).where(Chapter.id == chid, Chapter.course_id == cid)
+            )).scalar_one_or_none()
+            if chapter is None:
+                raise HTTPException(status_code=404, detail="chapter not found in this course")
+            # Capture ``order`` before delete — needed to filter Qdrant
+            # chunks, which were stamped with this value as
+            # ``chapter_idx`` at ingestion time.
+            chapter_order = int(chapter.order)
+            chapter_title = chapter.title
+            await db.delete(chapter)
+            await db.commit()
+
+        # Best-effort RAG cleanup
+        try:
+            if hasattr(rag, "delete_by_course_and_chapter"):
+                rag.delete_by_course_and_chapter(
+                    course_id,
+                    chapter_idx=chapter_order,
+                    chapter_title=chapter_title,
+                )
+            elif getattr(rag, "all_docs", None):
+                # Fallback path: old RAG instance without the method.
+                # Mirror the strict-AND logic of the canonical method —
+                # prefer title (reliably stamped), fall back to idx only
+                # when the title is missing. Never wildcard within a
+                # course (that's delete_by_course_id's job).
+                title_norm = (chapter_title or "").strip()
+                use_title = bool(title_norm)
+                def _keep(d):
+                    meta = d.metadata or {}
+                    if meta.get("course") != course_id:
+                        return True
+                    if use_title:
+                        return (meta.get("chapter_title") or "").strip() != title_norm
+                    try:
+                        return int(meta.get("chapter_idx")) != chapter_order
+                    except (TypeError, ValueError):
+                        return True
+                rag.all_docs = [d for d in rag.all_docs if _keep(d)]
+                # Persist + rebuild BM25 (use the private helpers; the
+                # canonical method does the same work).
+                if hasattr(rag, "_save_docs_cache"):
+                    rag._save_docs_cache()
+                if hasattr(rag, "_build_hybrid_retriever"):
+                    if rag.all_docs:
+                        rag._build_hybrid_retriever()
+                    else:
+                        rag.bm25_retriever = None
+        except Exception as exc:    # noqa: BLE001
+            log.warning(
+                "RAG chapter cleanup failed for %s/%s : %s",
+                course_id, chapter_id, exc,
+            )
+
+        return {
+            "deleted_chapter_id": chapter_id,
+            "course_id": course_id,
+            "chapter_order": chapter_order,
+            "chapter_title": chapter_title,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("chapter delete failed")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

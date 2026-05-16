@@ -596,6 +596,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 question_ctx.paused_state.get("slide_content", "") if question_ctx else ""
             )
             _course_for_cache = (question_ctx.course_id if question_ctx else "") or ""
+            # Hoisted out of the try block below so they're defined on the
+            # cache-hit path too — the cache-hit branch raises _SkipLLMPipeline
+            # before the original assignments at line 672-673 ran, leaving
+            # both variables unbound when downstream code at line ~921
+            # (history persistence) tried to read them. UnboundLocalError.
+            _qa_course_id = _course_for_cache
+            _qa_student_id = (question_ctx.student_id if question_ctx and getattr(question_ctx, 'student_id', None) else "")
             qa_cache_hit = False
             try:
                 from cache.qa_cache import get_qa_response
@@ -644,7 +651,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 if _slide_image:
                     try:
                         from services.vision_describe import describe_slide_image, merge_into_slide_content
-                        _vision_desc = await describe_slide_image(_slide_image, (lang or "en")[:2])
+                        _vision_desc = await describe_slide_image(
+                            _slide_image,
+                            (lang or "en")[:2],
+                            slide_text=_slide_text_raw,
+                        )
                         if _vision_desc:
                             _last_slide_content = merge_into_slide_content(
                                 _slide_text_raw, _vision_desc, (lang or "en")[:2],
@@ -665,8 +676,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 #      tone and depth ("don't redefine X, they know it").
                 # Both are best-effort : a failure here NEVER blocks the
                 # answer flow.
-                _qa_course_id = (question_ctx.course_id if question_ctx else "") or ""
-                _qa_student_id = (question_ctx.student_id if question_ctx and getattr(question_ctx, 'student_id', None) else "")
+                # _qa_course_id / _qa_student_id hoisted above the cache-check
+                # so they're available on the cache-hit path too. No reassignment
+                # needed here — the values are the same.
                 persistent_history: list[dict] = []
                 student_snapshot = None
                 try:
@@ -2538,18 +2550,44 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                             await asyncio.sleep(0)  # yield control
                 
                 try:
-                    # Launch streaming pipeline with course language to force STT detection
-                    course_lang = ctx.course_analysis.get("language") if ctx and ctx.course_analysis else None
+                    # STT language: auto-detect per utterance. We do NOT force the
+                    # course language here — students can ask questions in a
+                    # language different from the slides (e.g. English-speaking
+                    # student on a course whose analyzer mislabeled the language),
+                    # and forcing a wrong language collapses Whisper accuracy on
+                    # numbers, acronyms, and proper nouns.
                     course_id_for_rag = ctx.course_id if ctx else None  # ✅ Pass course_id from session context
+                    # Bias Whisper with the slide's actual VOCABULARY (OCR
+                    # text + topic titles) — never the live narration. Narration
+                    # is a coherent sentence which Whisper hallucinates as a
+                    # continuation (observed: every student utterance came back
+                    # as a slice of the previous tutor answer, e.g. "is a key
+                    # part of the knowledge" regardless of actual speech).
+                    # Slide content is telegraphic (bullets, headings, dates,
+                    # proper nouns) — it gives Whisper the technical vocab
+                    # ("USTHB", "Boumediene", "Apriori", "KDD") without a
+                    # sentence pattern to parrot. Capped at 300 chars to stay
+                    # under Whisper's 224-token prompt limit.
+                    _stt_slide_text = (
+                        ctx.paused_state.get("slide_content", "") if ctx else ""
+                    ) or ""
+                    if current_chapter_title or current_section_title or _stt_slide_text:
+                        slide_context_for_stt = (
+                            f"{current_chapter_title}. {current_section_title}. "
+                            f"{_stt_slide_text[:200]}"
+                        )[:300]
+                    else:
+                        slide_context_for_stt = None
                     result = await run_pipeline_streaming(
                         audio_np, session_id, history,
                         on_text_chunk=on_text_chunk,
                         on_transcription=on_transcription,
                         on_audio_chunk=on_audio_chunk,
                         on_state_change=on_state_change,  # ✅ NOUVEAU: State updates
-                        force_language=course_lang,
+                        force_language=None,
                         course_id=course_id_for_rag,  # ✅ Scoped RAG retrieval
                         ctx=ctx,
+                        slide_context=slide_context_for_stt,
                         # ✅ Inject dependencies
                         transcriber=transcriber,
                         rag=rag,
@@ -4266,37 +4304,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     on_state_change=emit_confusion_micro_state,  # ✅ Pass callback for micro-states
                 )
                 
-                # ✅ UPDATE STATE: RAG Search
+                # RAG retrieval is performed inside the QA graph
+                # (agentic/qa/retriever.py:132). Previously this block ran a
+                # second retrieval here purely for telemetry — results were
+                # never used for answer generation, costing ~3-8s per text
+                # question. The current slide is passed to the graph via
+                # last_slide_content in qa_state below.
                 rag_start = time.time()
                 await send_state(DialogState.PROCESSING, "rag_search", {}, {}, turn_id=turn_id)
-                
-                chunks_with_scores = await asyncio.to_thread(
-                    rag.retrieve_chunks,
-                    content,
-                    k=Config.RAG_NUM_RESULTS,
-                    current_chapter_idx=current_chapter_idx,
-                    strict_chapter=bool(current_chapter_idx),
-                    course_id=course_id if course_id else None,  # ✅ Scoped RAG retrieval
-                )
-                
-                rag_time = (time.time() - rag_start) * 1000  # Convert to ms
-                avg_score = sum(score for _, score, _ in chunks_with_scores) / len(chunks_with_scores) if chunks_with_scores else 0.0
-
-                if current_slide_content:
-                    from langchain_core.documents import Document
-
-                    slide_doc = Document(
-                        page_content=current_slide_content,
-                        metadata={
-                            "course_id": course_id,
-                            "chapter_idx": current_chapter_idx,
-                            "chapter_title": current_chapter_title,
-                            "section_title": current_section_title,
-                            "slide_idx": current_slide_context.get("slide_index") if current_slide_context else chapter_index_int,
-                            "source_file": msg.get("slide_path") or msg.get("image_url") or "",
-                        },
-                    )
-                    chunks_with_scores = [(slide_doc, 1.0, f"Current slide: {current_chapter_title} / {current_section_title}")] + chunks_with_scores
+                chunks_with_scores: list = []
+                rag_time = (time.time() - rag_start) * 1000
+                avg_score = 0.0
 
                 if ctx:
                     await dialogue.transition(ctx.session_id, DialogState.PROCESSING)

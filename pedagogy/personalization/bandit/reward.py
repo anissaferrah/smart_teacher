@@ -45,7 +45,13 @@ def _load_weights() -> tuple[float, float, float]:
             w_e = float(data.get("W_ENGAGEMENT", 0.10))
             total = w_c + w_m + w_e
             if total > 0:
-                return w_c / total, w_m / total, w_e / total
+                w_c_norm = w_c / total
+                w_m_norm = w_m / total
+                w_e_norm = w_e / total
+                # Check for degenerate case: mastery took everything
+                if w_m_norm > 0.95:
+                    return 0.50, 0.40, 0.10  # fall back to editorial
+                return w_c_norm, w_m_norm, w_e_norm
         except Exception:
             pass
     return 0.50, 0.40, 0.10

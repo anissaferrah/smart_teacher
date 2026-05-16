@@ -83,12 +83,12 @@ class Config:
     SAMPLE_RATE: int = 16000
     CHUNK_SIZE: int = 512
     SPEECH_THRESHOLD: float = 0.3        # Lowered from 0.5 → better speech detection
-    SILENCE_DURATION: float = 1.0        # Reduced from 1.5 → faster response
+    SILENCE_DURATION: float = 1.5        # Long enough to allow mid-question pauses without splitting the utterance
     MAX_AUDIO_DURATION: float = 30.0
 
     # STT (Whisper)
     STT_BACKEND: str = os.getenv("STT_BACKEND", "faster-whisper")
-    WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "base")
+    WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "small")
     WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "cpu")
     WHISPER_COMPUTE: str = os.getenv("WHISPER_COMPUTE", "int8")
     WHISPER_THREADS: int = int(os.getenv("WHISPER_THREADS", "4"))
@@ -236,6 +236,34 @@ class Config:
     # On CPU-only machines, setting this to (physical_cores - 1) gives
     # the biggest speedup without starving the rest of the system.
     OLLAMA_NUM_THREADS: int    = int(os.getenv("OLLAMA_NUM_THREADS", "0"))
+
+    # Google Gemini vision provider (services/vision_describe.py)
+    # Free tier of gemini-1.5-flash via REST. Tried between OpenAI and
+    # Ollama when GEMINI_API_KEY is set. DISABLE_GEMINI mirrors
+    # DISABLE_OPENAI for in-session opt-out without restarting.
+    GEMINI_API_KEY: str        = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_VISION_MODEL: str   = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite")
+    DISABLE_GEMINI: bool       = os.getenv("DISABLE_GEMINI", "false").lower() == "true"
+
+    # Groq vision provider (services/vision_describe.py).
+    # Multimodal Llama 4 Scout via Groq's OpenAI-compatible endpoint.
+    # Tried before Gemini because Groq's free tier is much more generous
+    # (~14400 RPD vs Gemini's 1000 RPD on flash-lite) and inference is
+    # ~1s per slide. Reuses GROQ_API_KEY already configured for the
+    # text LLM. DISABLE_GROQ_VISION lets the operator skip Groq without
+    # touching the text-LLM key.
+    GROQ_VISION_MODEL: str     = os.getenv(
+        "GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"
+    )
+    DISABLE_GROQ_VISION: bool  = os.getenv("DISABLE_GROQ_VISION", "false").lower() == "true"
+
+    # Vision gate (services/vision_describe.should_describe_slide)
+    # When true, vision calls are skipped on slides whose extracted text
+    # has no math symbols, no formula markers, no visual-content keywords,
+    # is not sparse, and has no high symbol density. Saves ~50% of vision
+    # API calls on text-heavy lecture decks. Set false to force-call
+    # vision on every slide (e.g. for debugging the gate).
+    VISION_GATE_ENABLED: bool  = os.getenv("VISION_GATE_ENABLED", "true").lower() == "true"
 
     # ── Operational kill-switches ─────────────────────────────────────
     # Force-disable OpenAI everywhere : Brain.ask falls straight through

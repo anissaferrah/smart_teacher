@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "d8197e4c-1c84-43b2-9421-f9f7aa4b6c93",
+  "turn_id": 6,
+  "question_audio_path": "turns/questions/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/6_1778428837320.webm",
+  "question_text": "Be M25",
+  "answer_text": "I think I understand what's happening here, we're not discussing a specific term or concept related to the RAG pipeline, it seems like you might be referring to something outside of our course material, possibly a highway or a location, the M25 is a motorway in the UK, but that's not what we're covering in this course, so let's get back to the RAG pipeline and its thirteen stages.",
+  "language": "en",
+  "subject": "geography",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 0,
+  "char_position": 637,
+  "audio_answer_path": "turns/answers/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/6_1778428837320.mp3"
+}

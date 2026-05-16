@@ -436,6 +436,22 @@ function renderSubject(domain, c) {
         window.open(`/static/index.html?${params.toString()}`, '_blank');
       });
       row.appendChild(start);
+
+      // 🗑 Delete button — removes just this chapter (sections cascade
+      // via FK; RAG chunks for this chapter are cleared best-effort).
+      if (ch.id) {
+        const del = document.createElement('button');
+        del.className = 'btn small danger';
+        del.style.marginLeft = '6px';
+        del.textContent = '🗑';
+        del.title = `Delete « ${ch.title} »`;
+        del.addEventListener('click', e => {
+          e.stopPropagation();
+          confirmDeleteChapter(c, ch);
+        });
+        row.appendChild(del);
+      }
+
       body.appendChild(row);
     }
   } else {
@@ -592,6 +608,20 @@ async function uploadFiles(domain, subject, files) {
     toast(e.message, 'error');
   } finally {
     $('progress').classList.remove('show');
+  }
+}
+
+// ── Delete chapter (single course in the UI sense) ────────────────────
+async function confirmDeleteChapter(c, ch) {
+  const secs = ch.section_count || 0;
+  if (!confirm(`Delete « ${ch.title} » (${secs} section(s)) from « ${c.title} »?\nThis action is irreversible.`)) return;
+  try {
+    const res = await fetch(`/course/${c.id}/chapter/${ch.id}`, { method: 'DELETE', headers: authHeaders });
+    if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+    toast(`« ${ch.title} » deleted`, 'success');
+    await loadTree();
+  } catch (e) {
+    toast(e.message, 'error');
   }
 }
 

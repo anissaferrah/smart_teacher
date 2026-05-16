@@ -112,6 +112,49 @@ TITLE:"""
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
+# Patterns for stripping running headers/footers/markers from slide
+# content before sending it to the LLM title extractor. Without this,
+# the LLM picks the running chapter header ("2. Data, Dataset, Data
+# Warehouse") as the slide title on transition / diagram / example
+# slides where the actual heading isn't the largest text feature.
+_LINE_PAGE_NUM = re.compile(r"^\d{1,3}$")
+_LINE_CHAPTER_HEADER = re.compile(r"^\d+\.\s+[A-Z]")
+_LINE_TODO_MARKER = re.compile(r"^TODO$", re.IGNORECASE)
+
+
+def _strip_running_headers(content: str, chapter_title: str | None = None) -> str:
+    """Remove lines that consistently appear on every slide and would
+    otherwise dominate the LLM's title-pick heuristic.
+
+    Stripped:
+      - lone page-number lines
+      - chapter-header pattern lines (e.g. "2. Data, Dataset, Data Warehouse")
+      - literal ``TODO`` placeholders
+      - the literal ``chapter_title`` when the caller passes it (for
+        chapters whose header doesn't match the numbered pattern)
+    """
+    if not content:
+        return content
+
+    chapter_lit = (chapter_title or "").strip().casefold()
+    kept = []
+    for ln in content.splitlines():
+        stripped = ln.strip()
+        if not stripped:
+            kept.append(ln)
+            continue
+        if _LINE_PAGE_NUM.match(stripped):
+            continue
+        if _LINE_CHAPTER_HEADER.match(stripped):
+            continue
+        if _LINE_TODO_MARKER.match(stripped):
+            continue
+        if chapter_lit and stripped.casefold() == chapter_lit:
+            continue
+        kept.append(ln)
+    return "\n".join(kept)
+
+
 def _normalise_for_hash(content: str) -> str:
     """Collapse whitespace + lowercase, used only to compute the cache key.
 
@@ -194,7 +237,7 @@ def _looks_like_junk(title: str) -> bool:
 
 # ── Public API ──────────────────────────────────────────────────────────
 
-def extract_title_via_llm(content: str, language: str = "fr") -> str:
+def extract_title_via_llm(content: str, language: str = "fr", chapter_title: str | None = None) -> str:
     """Synchronous LLM-based title extraction.
 
     Returns the title string, or ``""`` when:
@@ -205,12 +248,24 @@ def extract_title_via_llm(content: str, language: str = "fr") -> str:
     Cached on disk by content MD5. The router's own
     ``DISABLE_OPENAI`` handling means this is one Ollama call when the
     OpenAI kill-switch is on.
+
+    ``chapter_title`` is optional; when provided, lines matching it
+    literally are stripped along with the numbered chapter-header
+    pattern. This prevents the LLM from picking the running chapter
+    header as the slide title on transition/diagram slides.
     """
     if not content or len(content.strip()) < _MIN_CONTENT_CHARS:
         return ""
 
+    # Strip running headers BEFORE hashing, so the cache key is stable
+    # against decorative differences and old miscached titles
+    # (extracted from un-stripped content) don't get returned.
+    cleaned = _strip_running_headers(content, chapter_title=chapter_title)
+    if len(cleaned.strip()) < _MIN_CONTENT_CHARS:
+        return ""
+
     lang = (language or "fr")[:2].lower()
-    md5 = _content_hash(content)
+    md5 = _content_hash(cleaned)
 
     # Cache fast-path : skip the LLM entirely on a hit.
     cached = _cache_read(md5, lang)
@@ -219,7 +274,7 @@ def extract_title_via_llm(content: str, language: str = "fr") -> str:
 
     # Build prompt with truncated content
     template = _PROMPT_FR if lang == "fr" else _PROMPT_EN
-    prompt = template.format(content=content[:_CONTENT_CAP])
+    prompt = template.format(content=cleaned[:_CONTENT_CAP])
 
     # Call via LLMRouter — single source of truth for OpenAI/Ollama
     # routing, DISABLE_OPENAI handling, error fallback. We prefer
@@ -248,11 +303,11 @@ def extract_title_via_llm(content: str, language: str = "fr") -> str:
         return ""
 
     _cache_write(md5, lang, title)
-    log.info("title_extractor : %r → %r (cached)", content[:40].replace("\n", " "), title)
+    log.info("title_extractor : %r → %r (cached)", cleaned[:40].replace("\n", " "), title)
     return title
 
 
-async def extract_title_via_llm_async(content: str, language: str = "fr") -> str:
+async def extract_title_via_llm_async(content: str, language: str = "fr", chapter_title: str | None = None) -> str:
     """Async wrapper — runs the (blocking) LLM call in a thread.
 
     Used by the course builder which already runs slide-title
@@ -260,4 +315,4 @@ async def extract_title_via_llm_async(content: str, language: str = "fr") -> str
     a thread keeps the asyncio loop free during the (potentially
     multi-second) Ollama HTTP wait.
     """
-    return await asyncio.to_thread(extract_title_via_llm, content, language)
+    return await asyncio.to_thread(extract_title_via_llm, content, language, chapter_title)

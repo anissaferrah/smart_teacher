@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "218c3bdc-8371-4206-8cab-039596f52a9b",
+  "turn_id": 3,
+  "question_audio_path": "turns/questions/218c3bdc-8371-4206-8cab-039596f52a9b/3_1778361798514.webm",
+  "question_text": "How can we calculate the median?",
+  "answer_text": "Let's revisit: think of a list of exam scores, to find the median, we need to arrange the scores in order from lowest to highest, and then find the middle score, if there's an odd number of scores, the middle one is the median, if there's an even number, we take the average of the two middle scores.",
+  "language": "en",
+  "subject": "math",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 2,
+  "section_index": 1,
+  "char_position": 284,
+  "audio_answer_path": "turns/answers/218c3bdc-8371-4206-8cab-039596f52a9b/3_1778361798514.mp3"
+}

@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "7ce02542-9ced-4c85-9a7e-083a7be27f9a",
+  "turn_id": 1,
+  "question_audio_path": "turns/questions/7ce02542-9ced-4c85-9a7e-083a7be27f9a/1_1778079083399.webm",
+  "question_text": "Well, you haven't told me what the names are.",
+  "answer_text": "The roles involved in the data mining process are: Database Administrator (DBA), Data Analyst (analyste de données), Business Analyst (analyste commercial), and End User (utilisateur final). Each of these roles interacts with different stages of the process, from data sources to decision making.",
+  "language": "en",
+  "subject": "language",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 10,
+  "char_position": 0,
+  "audio_answer_path": "turns/answers/7ce02542-9ced-4c85-9a7e-083a7be27f9a/1_1778079083399.mp3"
+}

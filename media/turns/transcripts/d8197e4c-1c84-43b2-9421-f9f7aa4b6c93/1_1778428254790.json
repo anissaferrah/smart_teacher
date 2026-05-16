@@ -1,0 +1,16 @@
+{
+  "kind": "audio_question",
+  "session_id": "d8197e4c-1c84-43b2-9421-f9f7aa4b6c93",
+  "turn_id": 1,
+  "question_audio_path": "turns/questions/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/1_1778428254790.webm",
+  "question_text": "What is the capital of...",
+  "answer_text": "This point is not covered in this course, we are currently focusing on the RAG pipeline, which is a Retrieval-Augmented Generation (système de génération augmenté de récupération) system, and does not include information about geography or country capitals.",
+  "language": "en",
+  "subject": "geography",
+  "chapter_title": "",
+  "section_title": "",
+  "chapter_index": 0,
+  "section_index": 0,
+  "char_position": 221,
+  "audio_answer_path": "turns/answers/d8197e4c-1c84-43b2-9421-f9f7aa4b6c93/1_1778428254790.mp3"
+}
