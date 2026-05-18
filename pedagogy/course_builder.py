@@ -16,6 +16,7 @@
 
 import logging
 import re
+import unicodedata
 import warnings
 from pathlib import Path
 
@@ -25,6 +26,124 @@ from core.domains_config import DEFAULT_DOMAIN, DEFAULT_COURSE, get_chapters, ge
 from ai.llm import Brain
 
 log = logging.getLogger("SmartTeacher.CourseBuilder")
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TITLE NORMALISATION & DISAMBIGUATION (rule-based, no LLM)
+# ══════════════════════════════════════════════════════════════════════
+# Section titles flow into chunk metadata (rag), Whisper STT initial_prompt
+# (handlers/ws.py), narrator context, quiz topics, and UI breadcrumbs. Two
+# failure modes hurt retrieval and STT:
+#   1. Casing drift — vision/LLM echoes the shouty slide header verbatim
+#      ('FEATURE TYPES') so the same concept ends up under two strings.
+#   2. Consecutive duplicates — slides 25/26/27 all 'Star Schema' even
+#      though 26 is the table data and 27 is the SQL example. Retrieval
+#      ranks by title-bias and can't tell them apart.
+# Both fixes live here so producers don't each need to remember to apply
+# them.
+
+_SQL_PATTERN = re.compile(r"\b(SELECT|JOIN|GROUP\s+BY)\b")
+_TABLE_PATTERN = re.compile(r"\b(Fact\w+|Dim\w+|\w+_id\b)")
+_EXAMPLE_PATTERN = re.compile(r"\b(Example|Exemple)\s*:", re.IGNORECASE)
+
+
+def _smart_case(s: str) -> str:
+    """Title-case ALL-CAPS strings, leave mixed case alone.
+
+    'FEATURE TYPES' → 'Feature Types'. 'Snowflake Schema' → unchanged.
+    'OLAP Cube' → unchanged (mixed case preserves the acronym).
+    """
+    alpha = [c for c in s if c.isalpha()]
+    if alpha and all(c.isupper() for c in alpha):
+        return s.title()
+    return s
+
+
+def _normalize_title(s: str) -> str:
+    """NFKC-fold ligatures and smart-case all-caps titles.
+
+    Single funnel applied at every producer return point so downstream
+    code (RAG metadata, Whisper prompt, narrator) gets canonical strings.
+    """
+    s = unicodedata.normalize("NFKC", s or "").strip()
+    return _smart_case(s)
+
+
+def _detect_content_shape(content: str, has_visuals: bool) -> str | None:
+    """Classify slide content into a short tag for title disambiguation.
+
+    Returns one of {'SQL', 'table', 'example', 'diagram'} or None.
+    Order matters: SQL beats table beats example; diagram is the
+    visual-only fallback when nothing textual matched.
+    """
+    body = content or ""
+    if _SQL_PATTERN.search(body):
+        return "SQL"
+    if _TABLE_PATTERN.search(body):
+        return "table"
+    if _EXAMPLE_PATTERN.search(body):
+        return "example"
+    if has_visuals:
+        return "diagram"
+    return None
+
+
+def _disambiguate_titles(
+    resolved: list[tuple[int, str, str]],
+    visuals_by_idx: dict[int, bool] | None = None,
+) -> list[tuple[int, str, str]]:
+    """Suffix consecutive duplicate titles with content-shape tags or counts.
+
+    Args:
+        resolved: list of (page_idx, title, content) sorted by page_idx.
+        visuals_by_idx: 0-based page index → has_visuals from
+            ``services.pdf_visuals.precompute_slide_visuals``. May be {} or None.
+
+    Returns a new list of tuples with disambiguated titles. Standalone
+    titles pass through untouched. For a run of N >= 2 consecutive
+    slides sharing a title, we suffix each slide with either:
+      • ' — <shape>' when every slide in the run got a content tag AND
+        all tags within the run are distinct, OR
+      • ' (i/N)' otherwise, so the title is at least unique.
+    """
+    if not resolved:
+        return resolved
+    visuals_by_idx = visuals_by_idx or {}
+
+    runs: list[list[int]] = []
+    i = 0
+    while i < len(resolved):
+        j = i + 1
+        while j < len(resolved) and resolved[j][1] == resolved[i][1]:
+            j += 1
+        if j - i >= 2:
+            runs.append(list(range(i, j)))
+        i = j
+
+    if not runs:
+        return resolved
+
+    out = list(resolved)
+    for run in runs:
+        shape_tags = []
+        for k in run:
+            page_idx, _, content = resolved[k]
+            has_v = visuals_by_idx.get(page_idx - 1, False)
+            shape_tags.append(_detect_content_shape(content, has_v))
+        non_none = [t for t in shape_tags if t]
+        use_shapes = (
+            None not in shape_tags
+            and len(set(shape_tags)) == len(run)
+        )
+        for offset, k in enumerate(run, start=1):
+            page_idx, title, content = resolved[k]
+            suffix = (
+                f" — {shape_tags[offset - 1]}" if use_shapes
+                else f" ({offset}/{len(run)})"
+            )
+            out[k] = (page_idx, f"{title}{suffix}", content)
+
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -243,11 +362,11 @@ class LocalStructurer:
             from agentic.teaching.planner import _extract_main_concept
             concept = _extract_main_concept(content, section_title=parent_title)
             if concept:
-                return concept
+                return _normalize_title(concept)
         except Exception as exc:
             log.debug(f"section-title extraction skipped: {exc}")
         suffix = parent_title.strip() or "Cours"
-        return f"{suffix} — Section {fallback_index}"
+        return _normalize_title(f"{suffix} — Section {fallback_index}")
 
     async def structure(
         self,
@@ -459,6 +578,7 @@ class CourseBuilder:
                     )
                 ).strip()
                 if vision_concept:
+                    vision_concept = _normalize_title(vision_concept)
                     log.info(
                         "    ✅ FINAL TITLE (page %d) : %r  [source=vision]",
                         fallback_index, vision_concept,
@@ -493,6 +613,7 @@ class CourseBuilder:
                 from services.title_extractor import extract_title_via_llm_async
                 llm_title = (await extract_title_via_llm_async(content, language, chapter_title=parent_title)).strip()
                 if llm_title:
+                    llm_title = _normalize_title(llm_title)
                     log.info(
                         "    ✅ FINAL TITLE (page %d) : %r  [source=llm]",
                         fallback_index, llm_title,
@@ -512,6 +633,9 @@ class CourseBuilder:
         title = self.structurer._derive_section_title(
             content, parent_title, fallback_index,
         )
+        # _derive_section_title already normalises, but keep the wrap
+        # here too in case the helper is bypassed by future code paths.
+        title = _normalize_title(title)
         # Identify which heuristic level fired so the log is meaningful:
         # a real concept extraction vs a numbered placeholder ("Cours —
         # Section N") fallback. The structural extractor uses the latter
@@ -980,9 +1104,13 @@ Résumé concis:"""
             # read the cached has_visuals flag and bypass the OCR-based
             # heuristic on slides whose visuals (diagrams, schemas,
             # formula-as-image) the text gate can't see.
+            visuals_by_idx: dict[int, bool] = {}
             try:
                 from services.pdf_visuals import precompute_slide_visuals
-                precompute_slide_visuals(str(path), [str(p) for p in png_paths])
+                visuals_by_idx = (
+                    precompute_slide_visuals(str(path), [str(p) for p in png_paths])
+                    or {}
+                )
             except Exception as exc:                                       # noqa: BLE001
                 log.debug(f"pdf_visuals precompute failed: {exc}")
 
@@ -1024,6 +1152,13 @@ Résumé concis:"""
 
             resolved = await asyncio.gather(
                 *(_resolve_one(idx, txt) for idx, txt in non_empty)
+            )
+            # Sort by page_idx then disambiguate consecutive-duplicate
+            # titles. gather() preserves order, but sorting defensively
+            # is cheap and keeps the assumption explicit.
+            resolved = _disambiguate_titles(
+                sorted(resolved, key=lambda t: t[0]),
+                visuals_by_idx,
             )
 
             for page_idx, title, content in resolved:

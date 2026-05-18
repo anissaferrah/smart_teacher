@@ -1,0 +1,322 @@
+[
+  {
+    "question": "According to the course definition, what three disciplines does data mining draw on to discover patterns in large datasets?",
+    "slide": 8,
+    "type": "factual",
+    "good_answer_hint": "Statistics, mathematics, and machine learning algorithms.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What role does data mining play between raw data and decision-making?",
+    "slide": 8,
+    "type": "conceptual",
+    "good_answer_hint": "Data mining acts as a bridge between raw data and actionable knowledge.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "List at least four alternative names used for data mining and explain what each one emphasizes.",
+    "slide": 10,
+    "type": "structural",
+    "good_answer_hint": "KDD, Knowledge Extraction, Data/Pattern Analysis, Business Intelligence, Big Data Analytics.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What are the three interdependent pillars of modern AI and what is the role of each?",
+    "slide": 6,
+    "type": "structural",
+    "good_answer_hint": "Data (raw material), Algorithms (computational logic to find patterns), Hardware (physical infrastructure for compute power).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Describe the six-stage general process through which raw data becomes decisions in data mining.",
+    "slide": 9,
+    "type": "structural",
+    "good_answer_hint": "Cleaning & Integration, Selection, Analysis & Visualization, Algorithms, Patterns & Evaluation, Decision.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What categories of advanced datasets can be mined beyond standard relational databases?",
+    "slide": 12,
+    "type": "structural",
+    "good_answer_hint": "Data streams, time-series, graph/social networks, heterogeneous, spatial, spatiotemporal, multimedia, text databases.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the course position data mining within the broader field of artificial intelligence?",
+    "slide": 14,
+    "type": "conceptual",
+    "good_answer_hint": "Data mining is a subset within AI, specifically inside Machine Learning, alongside algorithms like k-Means, k-NN, Decision Trees.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What five types of patterns can be extracted from data during the mining process?",
+    "slide": 13,
+    "type": "structural",
+    "good_answer_hint": "Multidimensional description, association and correlation, classification and prediction, cluster analysis, anomaly detection.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is the distinction between cluster analysis and classification in terms of class labels?",
+    "slide": 13,
+    "type": "conceptual",
+    "good_answer_hint": "Classification uses known class labels for prediction. Cluster analysis works with unknown labels and forms new categories.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "In the Business Intelligence pipeline, which stakeholder performs information discovery and which handles data preprocessing?",
+    "slide": 11,
+    "type": "factual",
+    "good_answer_hint": "Business Analyst does information discovery (data mining). Data Analyst handles preprocessing and exploration.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the course trace the evolution of AI from the 1950s to today, and at which point does data mining appear?",
+    "slide": 4,
+    "type": "conceptual",
+    "good_answer_hint": "Four eras: Symbolic AI, Neural Networks, ML/DL & GPUs & Cloud (where data mining appears), Generative & Quantum & Agentic AI.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Why is data described as a pillar of AI, and how does this connect to the starting point of data mining?",
+    "slide": 6,
+    "type": "conceptual",
+    "good_answer_hint": "Data is the raw material â without it there is no AI. Data mining's bridge function only works when sufficient quality data exists.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What are the six types of datasets described in the course? Give one example for each.",
+    "slide": 2,
+    "type": "structural",
+    "good_answer_hint": "Structured (financial records), Semi-structured (JSON), Unstructured (images), Time-series (stock prices), Spatial (GPS), Multimodal (images+captions+audio).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Define the curse of dimensionality and explain the practical consequence it has on classifiers.",
+    "slide": 5,
+    "type": "definition",
+    "good_answer_hint": "As features grow, data becomes sparse, distance measures lose meaning, and models need exponentially more data. A classifier fine in 2D needs huge data in 100D.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "In which type of dataset does only the presence of an attribute matter, and why is absence meaningless?",
+    "slide": 6,
+    "type": "conceptual",
+    "good_answer_hint": "Sparse datasets like shopping baskets â not buying a product is not informative, only purchased items matter.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is the difference between resolution and scale as dataset characteristics, and how does each affect pattern discovery?",
+    "slide": 7,
+    "type": "conceptual",
+    "good_answer_hint": "Resolution is granularity/precision. Scale is the analysis level. Monthly climate shows seasonality; yearly shows long-term warming. Different resolutions hide or reveal patterns.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is a data object and what are its other common names in the literature?",
+    "slide": 9,
+    "type": "definition",
+    "good_answer_hint": "A data object is a collection of attribute values describing an entity. Also called record, instance, example, tuple, sample, or observation.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Describe the five feature types covered in the course and provide one example of each.",
+    "slide": 12,
+    "type": "structural",
+    "good_answer_hint": "Nominal (color), Binary (gender), Ordinal (size: small/medium/large), Interval (temperature Celsius), Ratio (age, Kelvin).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is the difference between symmetric and asymmetric binary features, and how does this affect how they are handled?",
+    "slide": 12,
+    "type": "conceptual",
+    "good_answer_hint": "Symmetric: both outcomes equally important (gender). Asymmetric: one outcome more important (medical test positive). Convention: assign 1 to most important outcome.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Explain the distinction between interval-scaled and ratio-scaled numerical features with examples.",
+    "slide": 13,
+    "type": "conceptual",
+    "good_answer_hint": "Interval has no true zero (Celsius â ratios not meaningful). Ratio has true zero (Kelvin, age â 10 years is twice 5 years).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the course distinguish discrete from continuous numerical attributes, and which special case falls under discrete?",
+    "slide": 14,
+    "type": "conceptual",
+    "good_answer_hint": "Discrete: finite distinct values, no in-betweens (number of children). Binary is a special case. Continuous: infinite values in a range (height, weight).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Define similarity and dissimilarity as used in data mining, and state the typical value range for each.",
+    "slide": 15,
+    "type": "definition",
+    "good_answer_hint": "Similarity: how alike two objects are, range [0,1] where 1=identical. Dissimilarity: how different, non-negative, sometimes normalized to [0,1].",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "For nominal features, how does simple matching compute distance? Provide the formula and walk through the slide example.",
+    "slide": 17,
+    "type": "factual",
+    "good_answer_hint": "Distance = (# features - # matches) / # features. Example: (Red,Cat,Male) vs (Blue,Cat,Male) â (3-2)/3 = 0.33.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is the Minkowski distance and how do Manhattan and Euclidean distances relate to it?",
+    "slide": 19,
+    "type": "conceptual",
+    "good_answer_hint": "Minkowski is a generalized distance of order h. Manhattan is h=1 (sum of absolute differences). Euclidean is h=2 (square root of sum of squared differences).",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the classical approach handle distance computation for ordinal features?",
+    "slide": 20,
+    "type": "factual",
+    "good_answer_hint": "Convert categories to ranks, normalize to 0-1 scale, then apply numeric distance (Manhattan, Euclidean). Spearman/Kendall also exist.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Explain Gower's distance and when it is used.",
+    "slide": 21,
+    "type": "definition",
+    "good_answer_hint": "Used for mixed-feature datasets. Similarity Sij = weighted average of per-feature similarities. Weights usually set to 1. Handles nominal, ordinal, and numerical together.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Contrast a dataset with a data warehouse in terms of size, format, and purpose.",
+    "slide": 22,
+    "type": "conceptual",
+    "good_answer_hint": "Dataset: small/medium, specific analysis, any format. Data warehouse: terabytes/petabytes, structured schemas, supports BI and large-scale decision-making.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What are fact tables and dimension tables in a data warehouse, and how do they differ?",
+    "slide": 23,
+    "type": "conceptual",
+    "good_answer_hint": "Fact tables store numeric measurable data, largest table, has foreign keys. Dimension tables store descriptive context, primary key, fewer rows but more columns.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Describe the star, snowflake, and galaxy schemas and explain when each is appropriate.",
+    "slide": 24,
+    "type": "structural",
+    "good_answer_hint": "Star: central fact + dimension tables, simple and popular. Snowflake: normalized dimensions, more organized but more joins. Galaxy: multiple fact tables sharing dimensions.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is the key difference between ETL and ELT pipelines and under what conditions is each preferred?",
+    "slide": 32,
+    "type": "conceptual",
+    "good_answer_hint": "ETL transforms before loading, preferred on-premise. ELT loads raw first then transforms inside warehouse, preferred for cloud. ELT faster for large data and preserves raw data.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does sparsity relate to the concept that only presence counts, and what algorithmic implication does this have?",
+    "slide": 6,
+    "type": "conceptual",
+    "good_answer_hint": "Sparse datasets have many zeros/missing values where absence is meaningless. Classical algorithms struggle, so specialized techniques like matrix factorization are needed.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the data mining general process map onto the Business Intelligence pipeline â who performs which step?",
+    "slide": 9,
+    "type": "conceptual",
+    "good_answer_hint": "DBA manages sources, Data Analyst handles preprocessing/exploration, Business Analyst performs mining, End User receives output via visualization.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Explain how the three pillars of modern AI each play a role across the different stages of the data mining process.",
+    "slide": 6,
+    "type": "conceptual",
+    "good_answer_hint": "Data provides raw input at cleaning/selection. Algorithms applied during analysis to find patterns. Hardware enables compute power to run algorithms on large datasets.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the choice of feature type influence which distance measure is appropriate for comparing data objects?",
+    "slide": 12,
+    "type": "conceptual",
+    "good_answer_hint": "Nominal â simple matching or Hamming. Ordinal â rank+normalize then numeric, or Spearman/Kendall. Numerical â Minkowski family. Mixed â Gower's distance.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Trace the journey of data from raw source files through to a star schema data warehouse, identifying which stage each concept belongs to.",
+    "slide": 22,
+    "type": "structural",
+    "good_answer_hint": "Raw data â ETL/ELT pipeline â Data Warehouse (star/snowflake/galaxy schema with fact and dimension tables) â OLAP querying â Data Mining â Insights.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "A dataset has 500 features describing gene expression. Using course concepts, explain what problem this poses and what causes it.",
+    "slide": 5,
+    "type": "conceptual",
+    "good_answer_hint": "Curse of dimensionality â data becomes sparse, distance measures lose meaning, models need exponentially more data. Resolution also matters at high dimensions.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is SMOTE and how is it used to handle class imbalance in datasets?",
+    "slide": -1,
+    "type": "out-of-scope",
+    "good_answer_hint": "NOT in the course. System should say it does not know or this is not covered.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "Explain the difference between L1 and L2 regularization in machine learning models.",
+    "slide": -1,
+    "type": "out-of-scope",
+    "good_answer_hint": "NOT in the course. System should say it does not know or this is not covered.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "What is a confusion matrix and how is precision calculated from it?",
+    "slide": -1,
+    "type": "out-of-scope",
+    "good_answer_hint": "NOT in the course. System should say it does not know or this is not covered.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  },
+  {
+    "question": "How does the k-means clustering algorithm assign data points to clusters during each iteration?",
+    "slide": -1,
+    "type": "out-of-scope",
+    "good_answer_hint": "NOT in the course. System should say it does not know or this is not covered.",
+    "course_id": "550e9734-415d-48eb-b1f1-c4a9d23b01d1",
+    "language": "en"
+  }
+]

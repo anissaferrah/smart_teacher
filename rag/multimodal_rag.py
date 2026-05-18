@@ -40,6 +40,16 @@ def _normalize_text_for_diversity(text: str) -> str:
     return text
 
 
+def _clean_text_for_embedding(text: str) -> str:
+    """NFKC normalisation before embedding/hashing.
+
+    Folds PDF ligatures (ﬁ→fi, ﬂ→fl), fullwidth digits, and other
+    compatibility forms so 'deﬁnition' and 'definition' share the
+    same embedding and content_hash.
+    """
+    return unicodedata.normalize("NFKC", text or "")
+
+
 def _is_openai_embedding_model(model_name: str) -> bool:
     return model_name.strip().lower().startswith("text-embedding-")
 
@@ -114,6 +124,12 @@ class MultiModalRAG:
         self.bm25_retriever:  BM25Retriever | None     = None
         self.vector_retriever = None
         self.all_docs:        list[Document]           = []
+        # Cache for get_chapter_vocab — keyed by (course, chapter_idx, max_terms,
+        # max_chars). Invalidated in reset(), delete_by_course_and_chapter(),
+        # and delete_by_course_id(). Adding new chunks via _store_documents
+        # leaves stale entries intentionally — early-exit at max_terms makes
+        # them harmless in practice.
+        self._chapter_vocab_cache: dict[tuple[str, int, int, int], str] = {}
         self.summary_cache:   dict[str, str]           = {}
         # idea_cache : md5(text) -> list[{"idea": str, "label": str}]
         # evite re-LLM lors des re-ingestions
@@ -442,7 +458,7 @@ class MultiModalRAG:
             local_to_global: dict[str, str] = {}
             idea_ids_for_section: list[str] = []
             for j, idea_dict in enumerate(ideas):
-                idea_text = idea_dict["idea"]
+                idea_text = _clean_text_for_embedding(idea_dict["idea"])
                 content_hash = hashlib.md5(idea_text.encode()).hexdigest()[:8]
                 idea_id = hashlib.md5(
                     f"{course_id or course}|{chapter_idx}|{section_idx}|{section_index}|{j}|{content_hash}".encode()
@@ -452,9 +468,20 @@ class MultiModalRAG:
                 local_to_global[local_id] = idea_id
 
             for j, idea_dict in enumerate(ideas):
-                idea_text = idea_dict["idea"]
+                idea_text = _clean_text_for_embedding(idea_dict["idea"])
                 idea_label = idea_dict["label"]
                 idea_id = idea_ids_for_section[j]
+
+                # Skip TODO-placeholder chunks (slides flagged "TODO" with
+                # no real content — would pollute retrieval).
+                stripped = idea_text.strip()
+                if len(stripped) < 200 and "TODO" in stripped.upper():
+                    log.warning(
+                        f"⏭️  Skipped TODO placeholder chunk "
+                        f"(slide={page_index}, section='{section_title}', "
+                        f"len={len(stripped)})"
+                    )
+                    continue
 
                 # Resolve relations local_id → global idea_id
                 depends_on_ids = [
@@ -886,6 +913,58 @@ class MultiModalRAG:
             tagged_meta = {**cm, "context_type": "neighbor"}
             out.append(Document(page_content=cand.page_content, metadata=tagged_meta))
         return out
+
+    def get_chapter_vocab(
+        self,
+        course: str,
+        chapter_idx: int,
+        max_terms: int = 30,
+        max_chars: int = 200,
+    ) -> str:
+        """Return a comma-separated, deduped list of concept labels for a chapter.
+
+        Sources: every chunk's ``idea_label`` and ``section_title`` for the
+        given (course, chapter_idx). Each label is split at the first period
+        and trimmed to ≤5 words, so even if ingestion produced sentence-long
+        labels the output stays TELEGRAPHIC — safe to feed to Whisper as
+        initial_prompt without giving it a sentence pattern to parrot.
+
+        Cached per (course, chapter_idx, max_terms, max_chars); invalidated
+        when chunks are deleted or the corpus is reset.
+        """
+        cache_key = (course, chapter_idx, max_terms, max_chars)
+        cached = self._chapter_vocab_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if not self.all_docs:
+            self._chapter_vocab_cache[cache_key] = ""
+            return ""
+        seen: set[str] = set()
+        out: list[str] = []
+        for d in self.all_docs:
+            m = d.metadata or {}
+            if m.get("course") != course or m.get("chapter_idx") != chapter_idx:
+                continue
+            for key in ("idea_label", "section_title"):
+                raw = (m.get(key) or "").strip()
+                if not raw:
+                    continue
+                term = raw.split(".", 1)[0]
+                term = " ".join(term.split()[:5]).strip()
+                if not term:
+                    continue
+                norm = term.lower()
+                if norm in seen:
+                    continue
+                seen.add(norm)
+                out.append(term)
+                if len(out) >= max_terms:
+                    break
+            if len(out) >= max_terms:
+                break
+        result = (", ".join(out))[:max_chars]
+        self._chapter_vocab_cache[cache_key] = result
+        return result
 
     def _vector_search(
         self, query: str, k: int,
@@ -2342,7 +2421,7 @@ class MultiModalRAG:
             local_to_global: dict[str, str] = {}
             idea_ids_for_chunk: list[str] = []
             for j, idea_dict in enumerate(ideas):
-                idea_text = idea_dict["idea"]
+                idea_text = _clean_text_for_embedding(idea_dict["idea"])
                 content_hash = hashlib.md5(idea_text.encode()).hexdigest()[:8]
                 idea_id = hashlib.md5(
                     f"{course_id or course}|{chapter_idx}|{section_idx}|{i}|{j}|{content_hash}".encode()
@@ -2352,9 +2431,20 @@ class MultiModalRAG:
                 local_to_global[local_id] = idea_id
 
             for j, idea_dict in enumerate(ideas):
-                idea_text = idea_dict["idea"]
+                idea_text = _clean_text_for_embedding(idea_dict["idea"])
                 idea_label = idea_dict["label"]
                 idea_id = idea_ids_for_chunk[j]
+
+                # Skip TODO-placeholder chunks (slides flagged "TODO" with
+                # no real content — would pollute retrieval).
+                stripped = idea_text.strip()
+                if len(stripped) < 200 and "TODO" in stripped.upper():
+                    log.warning(
+                        f"⏭️  Skipped TODO placeholder chunk "
+                        f"(chunk_idx={i}, section='{section_title}', "
+                        f"len={len(stripped)})"
+                    )
+                    continue
 
                 depends_on_ids = [
                     local_to_global[d] for d in idea_dict.get("depends_on", [])
@@ -2365,6 +2455,7 @@ class MultiModalRAG:
 
                 summary = summaries_flat[summary_cursor] if summary_cursor < len(summaries_flat) else idea_text
                 summary_cursor += 1
+                summary = _clean_text_for_embedding(summary)
                 lang = self._detect_language(idea_text)
                 content_hash = hashlib.md5((summary or idea_text).encode()).hexdigest()[:8]
 
@@ -3158,6 +3249,7 @@ class MultiModalRAG:
         removed = before - len(self.all_docs)
 
         self._save_docs_cache()
+        self._chapter_vocab_cache.clear()
 
         if self.all_docs:
             self._build_hybrid_retriever()
@@ -3197,6 +3289,7 @@ class MultiModalRAG:
         removed = before - len(self.all_docs)
 
         self._save_docs_cache()
+        self._chapter_vocab_cache.clear()
 
         if self.all_docs:
             self._build_hybrid_retriever()
@@ -3214,6 +3307,7 @@ class MultiModalRAG:
         log.warning("🔄 Réinitialisation de la base RAG…")
         self.delete_collection()
         self.summary_cache.clear()
+        self._chapter_vocab_cache.clear()
         if self.docs_cache.exists():
             self.docs_cache.unlink()
         if self.summary_cache_path.exists():

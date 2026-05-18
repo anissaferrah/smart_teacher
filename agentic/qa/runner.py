@@ -144,6 +144,17 @@ async def run_qa_graph(
     else:
         confidence = 0.0
 
+    # Append (question, chunks, answer) to logs/eval_log.jsonl for manual
+    # grading. Writer is best-effort and never raises.
+    from observability.eval_log import append_eval_record
+    append_eval_record(
+        question=text,
+        retrieved_chunks=qa_final.get("retrieved_chunks") or [],
+        answer=answer_clean,
+        session_id=session_id,
+        course_id=course_id,
+    )
+
     return {
         "answer":     answer_clean,
         "answer_raw": answer_raw,

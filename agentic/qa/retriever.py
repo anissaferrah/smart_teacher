@@ -151,6 +151,7 @@ class RetrieverAgent:
                     "idea_label":  meta.get("idea_label", ""),
                     "slide_idx":   meta.get("slide_idx"),
                     "score":       float(score) if score is not None else 0.5,
+                    "_vector_score": meta.get("_vector_score"),
                     "mastery_score": None,  # filled below
                     "seen":        False,
                     "context_type": meta.get("context_type"),

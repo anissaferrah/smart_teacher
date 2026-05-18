@@ -2453,27 +2453,39 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     # and forcing a wrong language collapses Whisper accuracy on
                     # numbers, acronyms, and proper nouns.
                     course_id_for_rag = ctx.course_id if ctx else None  # ✅ Pass course_id from session context
-                    # Bias Whisper with the slide's actual VOCABULARY (OCR
-                    # text + topic titles) — never the live narration. Narration
-                    # is a coherent sentence which Whisper hallucinates as a
-                    # continuation (observed: every student utterance came back
-                    # as a slice of the previous tutor answer, e.g. "is a key
-                    # part of the knowledge" regardless of actual speech).
-                    # Slide content is telegraphic (bullets, headings, dates,
-                    # proper nouns) — it gives Whisper the technical vocab
-                    # ("USTHB", "Boumediene", "Apriori", "KDD") without a
-                    # sentence pattern to parrot. Capped at 300 chars to stay
-                    # under Whisper's 224-token prompt limit.
+                    # Bias Whisper with chapter-wide concept VOCABULARY plus a
+                    # sliver of current-slide OCR. The glossary (deduped
+                    # idea_labels + section_titles from the whole chapter) lets
+                    # Whisper recognise terms the student may know from other
+                    # slides — e.g. "agentic AI" while paused on the "Pillars
+                    # of Modern AI" slide. Never feed the live narration: it's
+                    # a coherent sentence and Whisper parrots it back (observed:
+                    # every student utterance came out as a slice of the
+                    # previous tutor answer). Both the glossary and the OCR
+                    # text are telegraphic — no sentence rhythm to mimic.
+                    # Total capped at 300 chars to stay under Whisper's
+                    # 224-token prompt limit.
+                    glossary = ""
+                    try:
+                        if course_id_for_rag and current_chapter_idx is not None and rag:
+                            glossary = rag.get_chapter_vocab(
+                                course=course_id_for_rag,
+                                chapter_idx=int(current_chapter_idx),
+                            )
+                    except Exception as exc:
+                        log.debug("get_chapter_vocab failed: %s", exc)
+                        glossary = ""
                     _stt_slide_text = (
                         ctx.paused_state.get("slide_content", "") if ctx else ""
                     ) or ""
-                    if current_chapter_title or current_section_title or _stt_slide_text:
-                        slide_context_for_stt = (
-                            f"{current_chapter_title}. {current_section_title}. "
-                            f"{_stt_slide_text[:200]}"
-                        )[:300]
-                    else:
-                        slide_context_for_stt = None
+                    parts: list[str] = []
+                    if current_chapter_title:
+                        parts.append(current_chapter_title)
+                    if glossary:
+                        parts.append(f"Glossary: {glossary}")
+                    if _stt_slide_text:
+                        parts.append(_stt_slide_text[:120])
+                    slide_context_for_stt = (". ".join(parts))[:300] if parts else None
                     result = await run_pipeline_streaming(
                         audio_np, session_id, history,
                         on_text_chunk=on_text_chunk,

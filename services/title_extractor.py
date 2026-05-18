@@ -43,6 +43,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -178,7 +179,12 @@ def _cache_read(md5: str, lang: str) -> Optional[str]:
     if not p.exists():
         return None
     try:
-        return p.read_text(encoding="utf-8").rstrip("\n")
+        # NFKC on read so historical cache entries written before ligature
+        # normalisation existed (e.g. "Deﬁnitions", "Artiﬁcial Intelligence")
+        # self-heal on every hit instead of leaking back into chunk metadata
+        # and the Whisper STT prompt.
+        raw = p.read_text(encoding="utf-8").rstrip("\n")
+        return unicodedata.normalize("NFKC", raw)
     except Exception:
         return None
 

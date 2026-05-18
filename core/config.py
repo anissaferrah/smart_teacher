@@ -141,6 +141,12 @@ class Config:
         "CONFUSION_MODEL_PATH",
         str(Path(__file__).resolve().parent.parent / "dataset" / "sight-main" / "data" / "processed" / "confusion_model_final.pth"),
     )
+    # Optional override for the SIGHT classifier's confusion threshold.
+    # When set, wins over the value baked into the .pth bundle. When unset
+    # (None), the detector keeps the bundle's calibrated value.
+    SIGHT_THRESHOLD: float | None = (
+        float(os.getenv("SIGHT_THRESHOLD")) if os.getenv("SIGHT_THRESHOLD") else None
+    )
 
     # Qdrant
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")

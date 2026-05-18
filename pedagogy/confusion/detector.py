@@ -67,6 +67,8 @@ class SIGHTConfusionDetector:
         try:
             bundle = torch.load(self.bundle_path, map_location="cpu", weights_only=False)
             self.threshold = float(bundle.get("threshold", self.threshold))
+            if Config.SIGHT_THRESHOLD is not None:
+                self.threshold = Config.SIGHT_THRESHOLD
             self.max_length = int(bundle.get("max_length", self.max_length))
             self.model_name = str(bundle.get("model_name", self.model_name))
 

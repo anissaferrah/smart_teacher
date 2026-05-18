@@ -345,7 +345,9 @@ class IntentAgent:
         # uninterpretable output. Non-question intents force False since
         # they don't trigger retrieval anyway.
         if intent_type == "question":
-            needs_retrieval = bool(data.get("needs_retrieval", True))
+            needs_retrieval = bool(
+                data.get("needs_retrieval", data.get("needsretrieval", data.get("needsRetrieval", True)))
+            )
         else:
             needs_retrieval = False
 
@@ -356,7 +358,9 @@ class IntentAgent:
         # LLM explicitly says the feedback is negative.
         payload_dict: dict[str, Any] = {"source": "llm", "raw_text": text}
         if intent_type == "feedback":
-            raw_polarity = str(data.get("feedback_polarity", "")).strip().lower()
+            raw_polarity = str(
+                data.get("feedback_polarity") or data.get("feedbackpolarity") or data.get("feedbackPolarity") or ""
+            ).strip().lower()
             payload_dict["feedback_polarity"] = (
                 raw_polarity if raw_polarity in _VALID_POLARITIES else "positive"
             )
@@ -370,7 +374,9 @@ class IntentAgent:
         # An unknown value collapses to "next" (safe default — moving
         # forward is harder to misinterpret than e.g. silently skipping).
         if intent_type == "navigation":
-            raw_action = str(data.get("nav_action", "")).strip().lower()
+            raw_action = str(
+                data.get("nav_action") or data.get("navaction") or data.get("navAction") or ""
+            ).strip().lower()
             payload_dict["nav_action"] = (
                 raw_action if raw_action in _VALID_NAV_ACTIONS else "next"
             )
@@ -378,7 +384,7 @@ class IntentAgent:
             # avoid pathological inputs polluting downstream logs.
             if payload_dict["nav_action"] == "go_to_concept":
                 payload_dict["nav_target"] = str(
-                    data.get("nav_target", "") or ""
+                    data.get("nav_target") or data.get("navtarget") or data.get("navTarget") or ""
                 ).strip()[:_NAV_TARGET_CAP]
             else:
                 payload_dict["nav_target"] = ""
@@ -394,10 +400,14 @@ class IntentAgent:
         # and the responder decides afterwards whether to use chunks or
         # the LLM-direct definition fallback.
         if intent_type == "question":
-            is_definition = bool(data.get("is_definition", False))
+            is_definition = bool(
+                data.get("is_definition", data.get("isdefinition", data.get("isDefinition", False)))
+            )
             payload_dict["is_definition"] = is_definition
             if is_definition:
-                term = str(data.get("definition_term", "") or "").strip()
+                term = str(
+                    data.get("definition_term") or data.get("definitionterm") or data.get("definitionTerm") or ""
+                ).strip()
                 payload_dict["definition_term"] = term
         intent = VoiceIntent(
             type=intent_type,
@@ -422,7 +432,9 @@ class IntentAgent:
                 data.get("anchored_concept") or data.get("anchoredconcept") or data.get("anchoredConcept") or ""
             ).strip()
             rewritten = str(data.get("rewritten", "") or "").strip().strip('"').strip("«»").strip()
-            needed_rewrite = bool(data.get("needed_rewrite", False))
+            needed_rewrite = bool(
+                data.get("needed_rewrite", data.get("neededrewrite", data.get("neededRewrite", False)))
+            )
             # Operational guard: empty/oversized rewrites fall back to raw.
             if not rewritten or len(rewritten) > _REWRITTEN_CAP:
                 rewritten = text

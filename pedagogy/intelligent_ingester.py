@@ -732,14 +732,23 @@ class IntelligentIngester:
     def _render_slides_to_png(self, pdf_path: str, out_dir: Path) -> list[Path]:
         """PDF → PNG une image par page via pdf2image."""
         try:
+            import tempfile
             from pdf2image import convert_from_path
-            images = convert_from_path(pdf_path, dpi=self.slide_dpi)
-            paths: list[Path] = []
-            for i, img in enumerate(images, start=1):
-                path = out_dir / f"slide_{i:03d}.png"
-                img.save(str(path), format="PNG", optimize=True)
-                paths.append(path)
-            return paths
+            # output_folder makes pdftoppm write PNGs to disk directly instead
+            # of streaming all pages through the subprocess stdout pipe
+            # (the latter can blow up with MemoryError on large/high-DPI decks).
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                images = convert_from_path(
+                    pdf_path,
+                    dpi=self.slide_dpi,
+                    output_folder=tmp_dir,
+                )
+                paths: list[Path] = []
+                for i, img in enumerate(images, start=1):
+                    path = out_dir / f"slide_{i:03d}.png"
+                    img.save(str(path), format="PNG", optimize=True)
+                    paths.append(path)
+                return paths
         except Exception as exc:
             log.warning(f"_render_slides_to_png failed: {exc}")
             return []
